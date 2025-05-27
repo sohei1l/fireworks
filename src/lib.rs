@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use web_sys::{console, window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlProgram, WebGlShader, WebGlBuffer, MouseEvent};
+use web_sys::{console, window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlProgram, WebGlShader, WebGlBuffer, MouseEvent, WebGlFramebuffer, WebGlTexture};
 
 #[derive(Clone, Copy)]
 struct Particle {
@@ -64,6 +64,11 @@ pub struct App {
     gravity_enabled: bool,
     gravity: f32,
     friction: f32,
+    // Bloom effect
+    bloom_enabled: bool,
+    framebuffer: WebGlFramebuffer,
+    texture: WebGlTexture,
+    blur_program: WebGlProgram,
 }
 
 #[wasm_bindgen]
@@ -200,12 +205,72 @@ impl App {
             });
         }
 
+        // Create framebuffer for bloom effect
+        let framebuffer = gl.create_framebuffer().ok_or("Failed to create framebuffer")?;
+        let texture = gl.create_texture().ok_or("Failed to create texture")?;
+        
+        gl.bind_texture(GL::TEXTURE_2D, Some(&texture));
+        gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+            GL::TEXTURE_2D, 0, GL::RGBA as i32, width, height, 0, GL::RGBA, GL::UNSIGNED_BYTE, None
+        ).map_err(|e| JsValue::from_str(&format!("Texture creation error: {:?}", e)))?;
+        
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MIN_FILTER, GL::LINEAR as i32);
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_MAG_FILTER, GL::LINEAR as i32);
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_S, GL::CLAMP_TO_EDGE as i32);
+        gl.tex_parameteri(GL::TEXTURE_2D, GL::TEXTURE_WRAP_T, GL::CLAMP_TO_EDGE as i32);
+        
+        gl.bind_framebuffer(GL::FRAMEBUFFER, Some(&framebuffer));
+        gl.framebuffer_texture_2d(GL::FRAMEBUFFER, GL::COLOR_ATTACHMENT0, GL::TEXTURE_2D, Some(&texture), 0);
+        gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+
+        // Create blur shader
+        let blur_vert_shader = compile_shader(&gl, GL::VERTEX_SHADER, r#"
+            attribute vec2 position;
+            varying vec2 v_texCoord;
+            
+            void main() {
+                gl_Position = vec4(position, 0.0, 1.0);
+                v_texCoord = (position + 1.0) * 0.5;
+            }
+        "#).map_err(|e| JsValue::from_str(&format!("Blur vertex shader error: {}", e)))?;
+
+        let blur_frag_shader = compile_shader(&gl, GL::FRAGMENT_SHADER, r#"
+            precision mediump float;
+            varying vec2 v_texCoord;
+            uniform sampler2D u_texture;
+            uniform vec2 u_resolution;
+            uniform float u_intensity;
+            
+            void main() {
+                vec2 texelSize = 1.0 / u_resolution;
+                vec4 color = texture2D(u_texture, v_texCoord);
+                
+                // Simple box blur for glow effect
+                vec4 blur = vec4(0.0);
+                float weight = 0.0;
+                
+                for (int x = -2; x <= 2; x++) {
+                    for (int y = -2; y <= 2; y++) {
+                        vec2 offset = vec2(float(x), float(y)) * texelSize * u_intensity;
+                        blur += texture2D(u_texture, v_texCoord + offset);
+                        weight += 1.0;
+                    }
+                }
+                
+                blur /= weight;
+                gl_FragColor = color + blur * 0.5; // Additive blend
+            }
+        "#).map_err(|e| JsValue::from_str(&format!("Blur fragment shader error: {}", e)))?;
+
+        let blur_program = link_program(&gl, &blur_vert_shader, &blur_frag_shader)
+            .map_err(|e| JsValue::from_str(&format!("Blur program linking error: {}", e)))?;
+
         // Clear color
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.enable(GL::BLEND);
         gl.blend_func(GL::SRC_ALPHA, GL::ONE);
 
-        console_log!("WebGL setup complete with {} particles", particles.len());
+        console_log!("WebGL setup complete with {} particles and bloom effect", particles.len());
 
         Ok(App {
             gl,
@@ -221,6 +286,10 @@ impl App {
             gravity_enabled: false,
             gravity: 200.0,
             friction: 0.99,
+            bloom_enabled: true,
+            framebuffer,
+            texture,
+            blur_program,
         })
     }
 
@@ -234,6 +303,12 @@ impl App {
             self.last_frame_time = current_time;
         }
         self.frame_count += 1;
+
+        if self.bloom_enabled {
+            // Render to framebuffer first
+            self.gl.bind_framebuffer(GL::FRAMEBUFFER, Some(&self.framebuffer));
+            self.gl.viewport(0, 0, self.width as i32, self.height as i32);
+        }
 
         // Clear the canvas
         self.gl.clear(GL::COLOR_BUFFER_BIT);
@@ -262,6 +337,32 @@ impl App {
         // Update and render particles
         self.update_particles(current_time);
         self.render_particles();
+
+        if self.bloom_enabled {
+            // Render the blurred result to screen
+            self.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+            self.gl.viewport(0, 0, self.width as i32, self.height as i32);
+            self.gl.clear(GL::COLOR_BUFFER_BIT);
+
+            self.gl.use_program(Some(&self.blur_program));
+            
+            let texture_location = self.gl.get_uniform_location(&self.blur_program, "u_texture");
+            let resolution_location = self.gl.get_uniform_location(&self.blur_program, "u_resolution");
+            let intensity_location = self.gl.get_uniform_location(&self.blur_program, "u_intensity");
+            
+            self.gl.active_texture(GL::TEXTURE0);
+            self.gl.bind_texture(GL::TEXTURE_2D, Some(&self.texture));
+            self.gl.uniform1i(texture_location.as_ref(), 0);
+            self.gl.uniform2f(resolution_location.as_ref(), self.width, self.height);
+            self.gl.uniform1f(intensity_location.as_ref(), 2.0);
+
+            // Draw full screen quad
+            self.gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.vertex_buffer));
+            let position_location = self.gl.get_attrib_location(&self.blur_program, "position") as u32;
+            self.gl.enable_vertex_attrib_array(position_location);
+            self.gl.vertex_attrib_pointer_with_i32(position_location, 2, GL::FLOAT, false, 0, 0);
+            self.gl.draw_arrays(GL::TRIANGLES, 0, 6);
+        }
     }
 
     fn update_particles(&mut self, _current_time: f64) {
@@ -409,6 +510,12 @@ impl App {
     pub fn set_friction(&mut self, friction: f32) {
         self.friction = friction.max(0.9).min(1.0); // Clamp between 0.9 and 1.0
         console_log!("Friction set to {}", self.friction);
+    }
+
+    #[wasm_bindgen]
+    pub fn set_bloom(&mut self, enabled: bool) {
+        self.bloom_enabled = enabled;
+        console_log!("Bloom {}", if enabled { "enabled" } else { "disabled" });
     }
 }
 

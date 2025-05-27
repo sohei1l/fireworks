@@ -23,5 +23,7 @@ web-sys = { version = "0.3", features = [
   "Performance",
   "MouseEvent",
   "EventTarget",
+  "WebGlFramebuffer",
+  "WebGlTexture",
 ] }
 js-sys = "0.3"
