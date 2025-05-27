@@ -2,16 +2,58 @@
 
 A browser playground where you fling glowing particles that bounce, fade, and chain-react. Built with Rust + WebGL to explore WASM in the browser.
 
-## How to Run
+## Quick Start
 
-1. Install Rust and wasm-pack
-2. Build the WASM module: `wasm-pack build --target web`
-3. Serve the files with a local HTTP server
-4. Open in browser and click to spawn particles
+### Prerequisites
+```bash
+# Install Rust (if you don't have it)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install wasm-pack
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+# OR: cargo install wasm-pack
+```
+
+### Build and Run
+```bash
+# Clone the repository
+git clone https://github.com/sohei1l/neon-particles.git
+cd neon-particles
+
+# Build the WASM module
+./build.sh
+# OR: wasm-pack build --target web --out-dir pkg
+
+# Serve locally (choose one)
+python -m http.server 8000           # Python 3
+npx serve .                          # Node.js
+php -S localhost:8000                # PHP
+
+# Open browser
+open http://localhost:8000
+```
+
+### Controls
+- **Click**: Spawn particle bursts
+- **Gravity**: Toggle gravitational physics
+- **Bloom Effect**: Toggle glow post-processing
+- **Friction**: Adjust particle energy decay
 
 ## Features
 
 - Interactive particle system with mouse controls
 - Physics simulation with gravity and collisions
 - Real-time WebGL rendering with glow effects
-- Configurable parameters and color palettes
+- Neon color cycling and bloom post-processing
+- Configurable parameters via UI controls
+
+## Development Timeline
+
+Built incrementally through 10 commits:
+1. **Boot** - WASM + WebGL setup
+2. **Draw One** - Animated gradient background  
+3. **Particles Core** - Basic particle system
+4. **Mouse Spawn** - Interactive particle creation
+5. **Physics Lite** - Gravity, bounce, friction
+6. **Color Cycling** - Neon palette effects
+7. **Bloom Pass** - Glow post-processing
