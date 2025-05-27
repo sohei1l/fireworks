@@ -1,6 +1,16 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{console, window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlProgram, WebGlShader, WebGlBuffer};
 
+#[derive(Clone, Copy)]
+struct Particle {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    life: f32,
+    max_life: f32,
+}
+
 // Import the `console.log` function from the browser
 #[wasm_bindgen]
 extern "C" {
@@ -45,6 +55,11 @@ pub struct App {
     frame_count: u32,
     program: WebGlProgram,
     vertex_buffer: WebGlBuffer,
+    particle_program: WebGlProgram,
+    particle_buffer: WebGlBuffer,
+    particles: Vec<Particle>,
+    width: f32,
+    height: f32,
 }
 
 #[wasm_bindgen]
@@ -118,10 +133,61 @@ impl App {
             gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &vert_array, GL::STATIC_DRAW);
         }
 
+        // Create particle shader
+        let particle_vert_shader = compile_shader(&gl, GL::VERTEX_SHADER, r#"
+            attribute vec2 position;
+            attribute float life;
+            uniform vec2 resolution;
+            varying float v_life;
+            
+            void main() {
+                vec2 clipspace = (position / resolution) * 2.0 - 1.0;
+                gl_Position = vec4(clipspace * vec2(1, -1), 0.0, 1.0);
+                gl_PointSize = 8.0;
+                v_life = life;
+            }
+        "#).map_err(|e| JsValue::from_str(&format!("Particle vertex shader error: {}", e)))?;
+
+        let particle_frag_shader = compile_shader(&gl, GL::FRAGMENT_SHADER, r#"
+            precision mediump float;
+            varying float v_life;
+            
+            void main() {
+                vec2 center = vec2(0.5);
+                float dist = distance(gl_PointCoord, center);
+                if (dist > 0.5) discard;
+                
+                float alpha = v_life * (1.0 - dist * 2.0);
+                vec3 color = vec3(0.0, 1.0, 1.0); // Cyan glow
+                gl_FragColor = vec4(color, alpha);
+            }
+        "#).map_err(|e| JsValue::from_str(&format!("Particle fragment shader error: {}", e)))?;
+
+        let particle_program = link_program(&gl, &particle_vert_shader, &particle_frag_shader)
+            .map_err(|e| JsValue::from_str(&format!("Particle program linking error: {}", e)))?;
+
+        // Create particle buffer for dynamic data
+        let particle_buffer = gl.create_buffer().ok_or("Failed to create particle buffer")?;
+
+        // Initialize particles
+        let mut particles = Vec::new();
+        for _ in 0..100 {
+            particles.push(Particle {
+                x: (js_sys::Math::random() as f32) * width as f32,
+                y: (js_sys::Math::random() as f32) * height as f32,
+                vx: (js_sys::Math::random() as f32 - 0.5) * 100.0,
+                vy: (js_sys::Math::random() as f32 - 0.5) * 100.0,
+                life: 1.0,
+                max_life: 1.0,
+            });
+        }
+
         // Clear color
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.enable(GL::BLEND);
+        gl.blend_func(GL::SRC_ALPHA, GL::ONE);
 
-        console_log!("WebGL setup complete with gradient shader");
+        console_log!("WebGL setup complete with {} particles", particles.len());
 
         Ok(App {
             gl,
@@ -129,6 +195,11 @@ impl App {
             frame_count: 0,
             program,
             vertex_buffer,
+            particle_program,
+            particle_buffer,
+            particles,
+            width: width as f32,
+            height: height as f32,
         })
     }
 
@@ -166,6 +237,77 @@ impl App {
 
         // Draw the quad
         self.gl.draw_arrays(GL::TRIANGLES, 0, 6);
+
+        // Update and render particles
+        self.update_particles(current_time);
+        self.render_particles();
+    }
+
+    fn update_particles(&mut self, _current_time: f64) {
+        for particle in &mut self.particles {
+            // Simple motion
+            particle.x += particle.vx * 0.016; // 60fps assumption
+            particle.y += particle.vy * 0.016;
+
+            // Bounce off edges
+            if particle.x < 0.0 || particle.x > self.width {
+                particle.vx = -particle.vx;
+                particle.x = particle.x.max(0.0).min(self.width);
+            }
+            if particle.y < 0.0 || particle.y > self.height {
+                particle.vy = -particle.vy;
+                particle.y = particle.y.max(0.0).min(self.height);
+            }
+
+            // Fade particles slowly
+            particle.life -= 0.002;
+            if particle.life <= 0.0 {
+                // Respawn particle
+                particle.x = (js_sys::Math::random() as f32) * self.width;
+                particle.y = (js_sys::Math::random() as f32) * self.height;
+                particle.vx = (js_sys::Math::random() as f32 - 0.5) * 100.0;
+                particle.vy = (js_sys::Math::random() as f32 - 0.5) * 100.0;
+                particle.life = 1.0;
+            }
+        }
+    }
+
+    fn render_particles(&mut self) {
+        // Use particle shader
+        self.gl.use_program(Some(&self.particle_program));
+
+        // Set resolution uniform
+        let resolution_location = self.gl.get_uniform_location(&self.particle_program, "resolution");
+        self.gl.uniform2f(resolution_location.as_ref(), self.width, self.height);
+
+        // Prepare particle data
+        let mut vertex_data = Vec::new();
+        for particle in &self.particles {
+            vertex_data.push(particle.x);
+            vertex_data.push(particle.y);
+            vertex_data.push(particle.life);
+        }
+
+        // Upload particle data
+        self.gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.particle_buffer));
+        unsafe {
+            let data_array = js_sys::Float32Array::view(&vertex_data);
+            self.gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &data_array, GL::DYNAMIC_DRAW);
+        }
+
+        // Set up attributes
+        let position_location = self.gl.get_attrib_location(&self.particle_program, "position") as u32;
+        let life_location = self.gl.get_attrib_location(&self.particle_program, "life") as u32;
+
+        self.gl.enable_vertex_attrib_array(position_location);
+        self.gl.enable_vertex_attrib_array(life_location);
+
+        let stride = 3 * 4; // 3 floats * 4 bytes
+        self.gl.vertex_attrib_pointer_with_i32(position_location, 2, GL::FLOAT, false, stride, 0);
+        self.gl.vertex_attrib_pointer_with_i32(life_location, 1, GL::FLOAT, false, stride, 8);
+
+        // Draw particles as points
+        self.gl.draw_arrays(GL::POINTS, 0, self.particles.len() as i32);
     }
 }
 
