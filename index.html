@@ -35,12 +35,43 @@
             font-size: 16px;
             z-index: 100;
         }
+        
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #ffffff;
+            font-size: 14px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #controls label {
+            display: block;
+            margin: 5px 0;
+        }
+        
+        #controls input[type="range"] {
+            width: 100px;
+        }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
     <div id="fps">FPS: --</div>
     <div id="instructions">Click to spawn particles!</div>
+    
+    <div id="controls">
+        <label>
+            <input type="checkbox" id="gravity-toggle"> Gravity
+        </label>
+        <label>
+            Friction: <input type="range" id="friction-slider" min="0.9" max="1.0" step="0.01" value="0.99">
+            <span id="friction-value">0.99</span>
+        </label>
+    </div>
     
     <script type="module">
         import init, { App } from './pkg/neon_particles.js';
@@ -62,6 +93,20 @@
                 const scaleY = canvas.height / rect.height;
                 
                 app.spawn_particles(x * scaleX, y * scaleY);
+            });
+            
+            // Add control event listeners
+            const gravityToggle = document.getElementById('gravity-toggle');
+            gravityToggle.addEventListener('change', (event) => {
+                app.set_gravity(event.target.checked);
+            });
+            
+            const frictionSlider = document.getElementById('friction-slider');
+            const frictionValue = document.getElementById('friction-value');
+            frictionSlider.addEventListener('input', (event) => {
+                const value = parseFloat(event.target.value);
+                app.set_friction(value);
+                frictionValue.textContent = value.toFixed(2);
             });
             
             function frame(time) {

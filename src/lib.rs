@@ -60,6 +60,9 @@ pub struct App {
     particles: Vec<Particle>,
     width: f32,
     height: f32,
+    gravity_enabled: bool,
+    gravity: f32,
+    friction: f32,
 }
 
 #[wasm_bindgen]
@@ -200,6 +203,9 @@ impl App {
             particles,
             width: width as f32,
             height: height as f32,
+            gravity_enabled: false,
+            gravity: 200.0,
+            friction: 0.99,
         })
     }
 
@@ -244,18 +250,29 @@ impl App {
     }
 
     fn update_particles(&mut self, _current_time: f64) {
-        for particle in &mut self.particles {
-            // Simple motion
-            particle.x += particle.vx * 0.016; // 60fps assumption
-            particle.y += particle.vy * 0.016;
+        let dt = 0.016; // 60fps assumption
 
-            // Bounce off edges
+        for particle in &mut self.particles {
+            // Apply gravity
+            if self.gravity_enabled {
+                particle.vy += self.gravity * dt;
+            }
+
+            // Apply friction
+            particle.vx *= self.friction;
+            particle.vy *= self.friction;
+
+            // Simple motion
+            particle.x += particle.vx * dt;
+            particle.y += particle.vy * dt;
+
+            // Bounce off edges with some energy loss
             if particle.x < 0.0 || particle.x > self.width {
-                particle.vx = -particle.vx;
+                particle.vx = -particle.vx * 0.8; // Energy loss on bounce
                 particle.x = particle.x.max(0.0).min(self.width);
             }
             if particle.y < 0.0 || particle.y > self.height {
-                particle.vy = -particle.vy;
+                particle.vy = -particle.vy * 0.8; // Energy loss on bounce
                 particle.y = particle.y.max(0.0).min(self.height);
             }
 
@@ -341,6 +358,18 @@ impl App {
                 }
             }
         }
+    }
+
+    #[wasm_bindgen]
+    pub fn set_gravity(&mut self, enabled: bool) {
+        self.gravity_enabled = enabled;
+        console_log!("Gravity {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    #[wasm_bindgen]
+    pub fn set_friction(&mut self, friction: f32) {
+        self.friction = friction.max(0.9).min(1.0); // Clamp between 0.9 and 1.0
+        console_log!("Friction set to {}", self.friction);
     }
 }
 
