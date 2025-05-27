@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Neon Particles</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #fps {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #00ff00;
+            font-size: 14px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="fps">FPS: --</div>
+    
+    <script type="module">
+        import init, { App } from './pkg/neon_particles.js';
+
+        async function run() {
+            await init();
+            
+            const app = new App();
+            
+            function frame(time) {
+                app.render(time);
+                requestAnimationFrame(frame);
+            }
+            
+            requestAnimationFrame(frame);
+        }
+        
+        run();
+    </script>
+</body>
+</html>

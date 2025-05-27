@@ -1,6 +1,25 @@
 [package]
 name = "neon-particles"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+  "console",
+  "window",
+  "Document",
+  "Element",
+  "HtmlCanvasElement",
+  "WebGlRenderingContext",
+  "WebGlProgram",
+  "WebGlShader",
+  "WebGlBuffer",
+  "WebGlUniformLocation",
+  "CanvasRenderingContext2d",
+  "Performance",
+] }
+js-sys = "0.3"
