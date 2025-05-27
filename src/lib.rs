@@ -69,6 +69,8 @@ pub struct App {
     framebuffer: WebGlFramebuffer,
     texture: WebGlTexture,
     blur_program: WebGlProgram,
+    // Trails
+    trails_enabled: bool,
 }
 
 #[wasm_bindgen]
@@ -290,6 +292,7 @@ impl App {
             framebuffer,
             texture,
             blur_program,
+            trails_enabled: true,
         })
     }
 
@@ -310,8 +313,33 @@ impl App {
             self.gl.viewport(0, 0, self.width as i32, self.height as i32);
         }
 
-        // Clear the canvas
-        self.gl.clear(GL::COLOR_BUFFER_BIT);
+        // Clear the canvas (or fade for trails)
+        if self.trails_enabled {
+            // Don't fully clear - let previous frames fade to create trails
+            self.gl.clear_color(0.0, 0.0, 0.0, 0.05);
+            self.gl.enable(GL::BLEND);
+            self.gl.blend_func(GL::SRC_ALPHA, GL::ONE_MINUS_SRC_ALPHA);
+            
+            // Draw a slightly transparent black quad to fade the background
+            self.gl.use_program(Some(&self.program));
+            let time_location = self.gl.get_uniform_location(&self.program, "time");
+            self.gl.uniform1f(time_location.as_ref(), 0.0); // Static black
+            
+            let resolution_location = self.gl.get_uniform_location(&self.program, "resolution");
+            self.gl.uniform2f(resolution_location.as_ref(), self.width, self.height);
+            
+            self.gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.vertex_buffer));
+            let position_location = self.gl.get_attrib_location(&self.program, "position") as u32;
+            self.gl.enable_vertex_attrib_array(position_location);
+            self.gl.vertex_attrib_pointer_with_i32(position_location, 2, GL::FLOAT, false, 0, 0);
+            self.gl.draw_arrays(GL::TRIANGLES, 0, 6);
+            
+            // Reset blend mode for particles
+            self.gl.blend_func(GL::SRC_ALPHA, GL::ONE);
+        } else {
+            // Normal clear
+            self.gl.clear(GL::COLOR_BUFFER_BIT);
+        }
 
         // Use our shader program
         self.gl.use_program(Some(&self.program));
@@ -516,6 +544,12 @@ impl App {
     pub fn set_bloom(&mut self, enabled: bool) {
         self.bloom_enabled = enabled;
         console_log!("Bloom {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    #[wasm_bindgen]
+    pub fn set_trails(&mut self, enabled: bool) {
+        self.trails_enabled = enabled;
+        console_log!("Trails {}", if enabled { "enabled" } else { "disabled" });
     }
 }
 

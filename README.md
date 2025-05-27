@@ -37,6 +37,7 @@ open http://localhost:8000
 - **Click**: Spawn particle bursts
 - **Gravity**: Toggle gravitational physics
 - **Bloom Effect**: Toggle glow post-processing
+- **Particle Trails**: Toggle fading particle trails
 - **Friction**: Adjust particle energy decay
 
 ## Features
@@ -45,4 +46,5 @@ open http://localhost:8000
 - Physics simulation with gravity and collisions
 - Real-time WebGL rendering with glow effects
 - Neon color cycling and bloom post-processing
+- Particle trails that fade over time
 - Configurable parameters via UI controls

@@ -71,6 +71,9 @@
             <input type="checkbox" id="bloom-toggle" checked> Bloom Effect
         </label>
         <label>
+            <input type="checkbox" id="trails-toggle" checked> Particle Trails
+        </label>
+        <label>
             Friction: <input type="range" id="friction-slider" min="0.9" max="1.0" step="0.01" value="0.99">
             <span id="friction-value">0.99</span>
         </label>
@@ -107,6 +110,11 @@
             const bloomToggle = document.getElementById('bloom-toggle');
             bloomToggle.addEventListener('change', (event) => {
                 app.set_bloom(event.target.checked);
+            });
+            
+            const trailsToggle = document.getElementById('trails-toggle');
+            trailsToggle.addEventListener('change', (event) => {
+                app.set_trails(event.target.checked);
             });
             
             const frictionSlider = document.getElementById('friction-slider');
