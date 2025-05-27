@@ -26,11 +26,21 @@
             font-size: 14px;
             z-index: 100;
         }
+        
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #00ffff;
+            font-size: 16px;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
     <div id="fps">FPS: --</div>
+    <div id="instructions">Click to spawn particles!</div>
     
     <script type="module">
         import init, { App } from './pkg/neon_particles.js';
@@ -39,6 +49,20 @@
             await init();
             
             const app = new App();
+            const canvas = document.getElementById('canvas');
+            
+            // Add mouse click event listener
+            canvas.addEventListener('click', (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                
+                // Scale to canvas internal coordinates
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                
+                app.spawn_particles(x * scaleX, y * scaleY);
+            });
             
             function frame(time) {
                 app.render(time);

@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use web_sys::{console, window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlProgram, WebGlShader, WebGlBuffer};
+use web_sys::{console, window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlProgram, WebGlShader, WebGlBuffer, MouseEvent};
 
 #[derive(Clone, Copy)]
 struct Particle {
@@ -308,6 +308,39 @@ impl App {
 
         // Draw particles as points
         self.gl.draw_arrays(GL::POINTS, 0, self.particles.len() as i32);
+    }
+
+    #[wasm_bindgen]
+    pub fn spawn_particles(&mut self, x: f32, y: f32) {
+        console_log!("Spawning particles at ({}, {})", x, y);
+        
+        // Spawn a burst of 10 particles at the mouse position
+        for _ in 0..10 {
+            let angle = js_sys::Math::random() as f32 * 2.0 * std::f32::consts::PI;
+            let speed = (js_sys::Math::random() as f32) * 150.0 + 50.0;
+            
+            let new_particle = Particle {
+                x,
+                y,
+                vx: angle.cos() * speed,
+                vy: angle.sin() * speed,
+                life: 1.0,
+                max_life: 1.0,
+            };
+
+            // Replace oldest particles or extend if under limit
+            if self.particles.len() < 500 {
+                self.particles.push(new_particle);
+            } else {
+                // Replace the first particle that has low life
+                if let Some(old_particle) = self.particles.iter_mut().find(|p| p.life < 0.3) {
+                    *old_particle = new_particle;
+                } else {
+                    // Replace first particle as fallback
+                    self.particles[0] = new_particle;
+                }
+            }
+        }
     }
 }
 
