@@ -9,6 +9,7 @@ struct Particle {
     vy: f32,
     life: f32,
     max_life: f32,
+    color_index: f32,
 }
 
 // Import the `console.log` function from the browser
@@ -140,28 +141,41 @@ impl App {
         let particle_vert_shader = compile_shader(&gl, GL::VERTEX_SHADER, r#"
             attribute vec2 position;
             attribute float life;
+            attribute float colorIndex;
             uniform vec2 resolution;
             varying float v_life;
+            varying float v_colorIndex;
             
             void main() {
                 vec2 clipspace = (position / resolution) * 2.0 - 1.0;
                 gl_Position = vec4(clipspace * vec2(1, -1), 0.0, 1.0);
                 gl_PointSize = 8.0;
                 v_life = life;
+                v_colorIndex = colorIndex;
             }
         "#).map_err(|e| JsValue::from_str(&format!("Particle vertex shader error: {}", e)))?;
 
         let particle_frag_shader = compile_shader(&gl, GL::FRAGMENT_SHADER, r#"
             precision mediump float;
             varying float v_life;
+            varying float v_colorIndex;
+            uniform vec3 palette[4];
             
             void main() {
                 vec2 center = vec2(0.5);
                 float dist = distance(gl_PointCoord, center);
                 if (dist > 0.5) discard;
                 
+                // Cycle through palette based on life and color index
+                float paletteIndex = mod(v_colorIndex + (1.0 - v_life) * 3.0, 4.0);
+                int index = int(paletteIndex);
+                float frac = paletteIndex - float(index);
+                
+                vec3 color1 = palette[index];
+                vec3 color2 = palette[int(mod(float(index + 1), 4.0))];
+                vec3 color = mix(color1, color2, frac);
+                
                 float alpha = v_life * (1.0 - dist * 2.0);
-                vec3 color = vec3(0.0, 1.0, 1.0); // Cyan glow
                 gl_FragColor = vec4(color, alpha);
             }
         "#).map_err(|e| JsValue::from_str(&format!("Particle fragment shader error: {}", e)))?;
@@ -182,6 +196,7 @@ impl App {
                 vy: (js_sys::Math::random() as f32 - 0.5) * 100.0,
                 life: 1.0,
                 max_life: 1.0,
+                color_index: (js_sys::Math::random() as f32) * 4.0,
             });
         }
 
@@ -285,6 +300,7 @@ impl App {
                 particle.vx = (js_sys::Math::random() as f32 - 0.5) * 100.0;
                 particle.vy = (js_sys::Math::random() as f32 - 0.5) * 100.0;
                 particle.life = 1.0;
+                particle.color_index = (js_sys::Math::random() as f32) * 4.0;
             }
         }
     }
@@ -297,12 +313,31 @@ impl App {
         let resolution_location = self.gl.get_uniform_location(&self.particle_program, "resolution");
         self.gl.uniform2f(resolution_location.as_ref(), self.width, self.height);
 
-        // Prepare particle data
+        // Set palette uniform - neon colors
+        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[0]");
+        if let Some(location) = palette_location {
+            self.gl.uniform3f(Some(&location), 1.0, 0.0, 1.0); // Magenta
+        }
+        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[1]");
+        if let Some(location) = palette_location {
+            self.gl.uniform3f(Some(&location), 0.0, 1.0, 1.0); // Cyan
+        }
+        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[2]");
+        if let Some(location) = palette_location {
+            self.gl.uniform3f(Some(&location), 0.0, 1.0, 0.0); // Green
+        }
+        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[3]");
+        if let Some(location) = palette_location {
+            self.gl.uniform3f(Some(&location), 1.0, 1.0, 0.0); // Yellow
+        }
+
+        // Prepare particle data with color index
         let mut vertex_data = Vec::new();
         for particle in &self.particles {
             vertex_data.push(particle.x);
             vertex_data.push(particle.y);
             vertex_data.push(particle.life);
+            vertex_data.push(particle.color_index);
         }
 
         // Upload particle data
@@ -315,13 +350,16 @@ impl App {
         // Set up attributes
         let position_location = self.gl.get_attrib_location(&self.particle_program, "position") as u32;
         let life_location = self.gl.get_attrib_location(&self.particle_program, "life") as u32;
+        let color_index_location = self.gl.get_attrib_location(&self.particle_program, "colorIndex") as u32;
 
         self.gl.enable_vertex_attrib_array(position_location);
         self.gl.enable_vertex_attrib_array(life_location);
+        self.gl.enable_vertex_attrib_array(color_index_location);
 
-        let stride = 3 * 4; // 3 floats * 4 bytes
+        let stride = 4 * 4; // 4 floats * 4 bytes
         self.gl.vertex_attrib_pointer_with_i32(position_location, 2, GL::FLOAT, false, stride, 0);
         self.gl.vertex_attrib_pointer_with_i32(life_location, 1, GL::FLOAT, false, stride, 8);
+        self.gl.vertex_attrib_pointer_with_i32(color_index_location, 1, GL::FLOAT, false, stride, 12);
 
         // Draw particles as points
         self.gl.draw_arrays(GL::POINTS, 0, self.particles.len() as i32);
@@ -343,6 +381,7 @@ impl App {
                 vy: angle.sin() * speed,
                 life: 1.0,
                 max_life: 1.0,
+                color_index: (js_sys::Math::random() as f32) * 4.0,
             };
 
             // Replace oldest particles or extend if under limit
