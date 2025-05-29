@@ -2,9 +2,16 @@
 
 A browser playground where you fling glowing particles that bounce, fade, and chain-react. Built with Rust + WebGL to explore WASM in the browser.
 
+## 🎮 Live Demo
+
+[![Demo](https://img.shields.io/badge/Live%20Demo-Neon%20Particles-blue?style=for-the-badge)](https://sohei1l.github.io/neon-particles)
+
+Try it out in your browser! Click to spawn particles and experiment with the controls.
+
 ## Quick Start
 
 ### Prerequisites
+
 ```bash
 # Install Rust (if you don't have it)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -15,6 +22,7 @@ curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 ```
 
 ### Build and Run
+
 ```bash
 # Clone the repository
 git clone https://github.com/sohei1l/neon-particles.git
@@ -34,17 +42,9 @@ open http://localhost:8000
 ```
 
 ### Controls
+
 - **Click**: Spawn particle bursts
 - **Gravity**: Toggle gravitational physics
 - **Bloom Effect**: Toggle glow post-processing
 - **Particle Trails**: Toggle fading particle trails
 - **Friction**: Adjust particle energy decay
-
-## Features
-
-- Interactive particle system with mouse controls
-- Physics simulation with gravity and collisions
-- Real-time WebGL rendering with glow effects
-- Neon color cycling and bloom post-processing
-- Particle trails that fade over time
-- Configurable parameters via UI controls
