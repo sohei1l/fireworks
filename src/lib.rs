@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use web_sys::{console, window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlProgram, WebGlShader, WebGlBuffer, MouseEvent, WebGlFramebuffer, WebGlTexture};
+use web_sys::{window, HtmlCanvasElement, WebGlRenderingContext as GL, WebGlProgram, WebGlShader, WebGlBuffer, WebGlFramebuffer, WebGlTexture};
 
 #[derive(Clone, Copy)]
 struct Particle {
@@ -8,7 +8,6 @@ struct Particle {
     vx: f32,
     vy: f32,
     life: f32,
-    max_life: f32,
     color_index: f32,
 }
 
@@ -170,21 +169,29 @@ impl App {
             precision mediump float;
             varying float v_life;
             varying float v_colorIndex;
-            uniform vec3 palette[4];
+            uniform vec3 u_color0;
+            uniform vec3 u_color1;
+            uniform vec3 u_color2;
+            uniform vec3 u_color3;
             
             void main() {
                 vec2 center = vec2(0.5);
                 float dist = distance(gl_PointCoord, center);
                 if (dist > 0.5) discard;
                 
-                // Cycle through palette based on life and color index
+                // Cycle through colors based on life and color index
                 float paletteIndex = mod(v_colorIndex + (1.0 - v_life) * 3.0, 4.0);
-                int index = int(paletteIndex);
-                float frac = paletteIndex - float(index);
                 
-                vec3 color1 = palette[index];
-                vec3 color2 = palette[int(mod(float(index + 1), 4.0))];
-                vec3 color = mix(color1, color2, frac);
+                vec3 color;
+                if (paletteIndex < 1.0) {
+                    color = mix(u_color0, u_color1, paletteIndex);
+                } else if (paletteIndex < 2.0) {
+                    color = mix(u_color1, u_color2, paletteIndex - 1.0);
+                } else if (paletteIndex < 3.0) {
+                    color = mix(u_color2, u_color3, paletteIndex - 2.0);
+                } else {
+                    color = mix(u_color3, u_color0, paletteIndex - 3.0);
+                }
                 
                 float alpha = v_life * (1.0 - dist * 2.0);
                 gl_FragColor = vec4(color, alpha);
@@ -206,7 +213,6 @@ impl App {
                 vx: (js_sys::Math::random() as f32 - 0.5) * 100.0,
                 vy: (js_sys::Math::random() as f32 - 0.5) * 100.0,
                 life: 1.0,
-                max_life: 1.0,
                 color_index: (js_sys::Math::random() as f32) * 4.0,
             });
         }
@@ -446,21 +452,21 @@ impl App {
         let resolution_location = self.gl.get_uniform_location(&self.particle_program, "resolution");
         self.gl.uniform2f(resolution_location.as_ref(), self.width, self.height);
 
-        // Set palette uniform - neon colors
-        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[0]");
-        if let Some(location) = palette_location {
+        // Set color uniforms - neon colors
+        let color0_location = self.gl.get_uniform_location(&self.particle_program, "u_color0");
+        if let Some(location) = color0_location {
             self.gl.uniform3f(Some(&location), 1.0, 0.0, 1.0); // Magenta
         }
-        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[1]");
-        if let Some(location) = palette_location {
+        let color1_location = self.gl.get_uniform_location(&self.particle_program, "u_color1");
+        if let Some(location) = color1_location {
             self.gl.uniform3f(Some(&location), 0.0, 1.0, 1.0); // Cyan
         }
-        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[2]");
-        if let Some(location) = palette_location {
+        let color2_location = self.gl.get_uniform_location(&self.particle_program, "u_color2");
+        if let Some(location) = color2_location {
             self.gl.uniform3f(Some(&location), 0.0, 1.0, 0.0); // Green
         }
-        let palette_location = self.gl.get_uniform_location(&self.particle_program, "palette[3]");
-        if let Some(location) = palette_location {
+        let color3_location = self.gl.get_uniform_location(&self.particle_program, "u_color3");
+        if let Some(location) = color3_location {
             self.gl.uniform3f(Some(&location), 1.0, 1.0, 0.0); // Yellow
         }
 
@@ -513,7 +519,6 @@ impl App {
                 vx: angle.cos() * speed,
                 vy: angle.sin() * speed,
                 life: 1.0,
-                max_life: 1.0,
                 color_index: (js_sys::Math::random() as f32) * 4.0,
             };
 
