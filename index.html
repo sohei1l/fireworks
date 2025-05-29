@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Neon Particles</title>
+    <title>Magic Brush</title>
     <style>
       body {
         margin: 0;
@@ -21,9 +21,8 @@
       #header {
         position: absolute;
         top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        text-align: center;
+        left: 20px;
+        text-align: left;
         z-index: 100;
       }
 
@@ -65,15 +64,10 @@
       }
 
       #fps {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        color: #00ff00;
-        font-size: 14px;
-        z-index: 100;
-        background: rgba(0, 0, 0, 0.6);
-        padding: 4px 8px;
-        border-radius: 4px;
+        color: #cccccc;
+        font-size: 12px;
+        margin-top: 8px;
+        text-align: center;
       }
 
       #controls {
@@ -130,21 +124,15 @@
     <canvas id="canvas"></canvas>
 
     <div id="header">
-      <h1 id="project-title">Neon Particles</h1>
+      <h1 id="project-title">Magic Brush</h1>
       <a
-        href="https://github.com/sohei1l/neon-particles"
+        href="https://github.com/sohei1l/magic-brush"
         target="_blank"
         id="github-link"
       >
-        https://github.com/sohei1l/neon-particles
+        https://github.com/sohei1l/magic-brush
       </a>
-      <div id="instructions">
-        <p>Click anywhere on Canvas</p>
-        <p>to spawn particles.</p>
-      </div>
     </div>
-
-    <div id="fps">FPS: --</div>
 
     <div id="controls">
       <h3>Controls</h3>
@@ -158,6 +146,9 @@
         <input type="checkbox" id="trails-toggle" checked /> Particle Trails
       </label>
       <label>
+        <input type="checkbox" id="magic-brush-toggle" checked /> Auto Trail
+      </label>
+      <label>
         Friction:
         <input
           type="range"
@@ -169,6 +160,7 @@
         />
         <span id="friction-value">0.95</span>
       </label>
+      <div id="fps">FPS: --</div>
     </div>
 
     <script type="module">
@@ -213,6 +205,90 @@
             }
           });
 
+          // Add mouse move event listener for magic brush
+          let magicBrushEnabled = true;
+          let isTouching = false; // Track if user is touching for mobile
+
+          canvas.addEventListener("mousemove", (event) => {
+            try {
+              if (magicBrushEnabled) {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                // Scale to canvas internal coordinates
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
+              }
+            } catch (e) {
+              console.error("Error with magic brush:", e);
+            }
+          });
+
+          // Add touch events for mobile support
+          canvas.addEventListener("touchstart", (event) => {
+            try {
+              event.preventDefault(); // Prevent scrolling
+              isTouching = true;
+
+              if (magicBrushEnabled) {
+                const rect = canvas.getBoundingClientRect();
+                const touch = event.touches[0];
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+
+                // Scale to canvas internal coordinates
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
+              }
+            } catch (e) {
+              console.error("Error with touch start:", e);
+            }
+          });
+
+          canvas.addEventListener("touchmove", (event) => {
+            try {
+              event.preventDefault(); // Prevent scrolling
+
+              if (magicBrushEnabled && isTouching) {
+                const rect = canvas.getBoundingClientRect();
+                const touch = event.touches[0];
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+
+                // Scale to canvas internal coordinates
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
+              }
+            } catch (e) {
+              console.error("Error with touch move:", e);
+            }
+          });
+
+          canvas.addEventListener("touchend", (event) => {
+            try {
+              event.preventDefault();
+              isTouching = false;
+            } catch (e) {
+              console.error("Error with touch end:", e);
+            }
+          });
+
+          canvas.addEventListener("touchcancel", (event) => {
+            try {
+              event.preventDefault();
+              isTouching = false;
+            } catch (e) {
+              console.error("Error with touch cancel:", e);
+            }
+          });
+
           // Add control event listeners
           const gravityToggle = document.getElementById("gravity-toggle");
 
@@ -245,6 +321,27 @@
               console.log("Trails set to:", event.target.checked);
             } catch (e) {
               console.error("Error setting trails:", e);
+            }
+          });
+
+          const magicBrushToggle =
+            document.getElementById("magic-brush-toggle");
+          
+          // Function to update cursor based on auto trail state
+          function updateCursor() {
+            canvas.style.cursor = magicBrushEnabled ? "crosshair" : "default";
+          }
+          
+          // Set initial cursor
+          updateCursor();
+          
+          magicBrushToggle.addEventListener("change", (event) => {
+            try {
+              magicBrushEnabled = event.target.checked;
+              updateCursor(); // Update cursor when toggle changes
+              console.log("Magic brush set to:", magicBrushEnabled);
+            } catch (e) {
+              console.error("Error setting magic brush:", e);
             }
           });
 

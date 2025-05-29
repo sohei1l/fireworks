@@ -1,12 +1,12 @@
-# Neon Particles
+# Magic Brush
 
 A browser playground where you fling glowing particles that bounce, fade, and chain-react. Built with Rust + WebGL to explore WASM in the browser.
 
 ## 🎮 Live Demo
 
-[![Demo](https://img.shields.io/badge/Live%20Demo-Neon%20Particles-blue?style=for-the-badge)](https://sohei1l.github.io/neon-particles)
+[![Demo](https://img.shields.io/badge/Live%20Demo-Neon%20Particles-blue?style=for-the-badge)](https://sohei1l.github.io/magic-brush)
 
-Try it out in your browser! Click to spawn particles and experiment with the controls.
+https://sohei1l.github.io/magic-brush
 
 ## Quick Start
 

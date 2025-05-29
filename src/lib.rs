@@ -159,7 +159,7 @@ impl App {
             void main() {
                 vec2 clipspace = (position / resolution) * 2.0 - 1.0;
                 gl_Position = vec4(clipspace * vec2(1, -1), 0.0, 1.0);
-                gl_PointSize = 8.0;
+                gl_PointSize = 12.0 + life * 8.0; // Bigger particles, varying with life
                 v_life = life;
                 v_colorIndex = colorIndex;
             }
@@ -559,6 +559,41 @@ impl App {
     pub fn set_trails(&mut self, enabled: bool) {
         self.trails_enabled = enabled;
         console_log!("Trails {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    #[wasm_bindgen]
+    pub fn spawn_magic_brush_particles(&mut self, x: f32, y: f32) {
+        // Spawn more impressive magic brush particles (4-5 particles)
+        for _ in 0..4 {
+            let angle = js_sys::Math::random() as f32 * 2.0 * std::f32::consts::PI;
+            let speed = (js_sys::Math::random() as f32) * 80.0 + 20.0; // More impressive speed
+            
+            // Add some randomness to position for magical scattered effect
+            let offset_x = (js_sys::Math::random() as f32 - 0.5) * 25.0;
+            let offset_y = (js_sys::Math::random() as f32 - 0.5) * 25.0;
+            
+            let new_particle = Particle {
+                x: x + offset_x,
+                y: y + offset_y,
+                vx: angle.cos() * speed,
+                vy: angle.sin() * speed,
+                life: 1.0,
+                color_index: (js_sys::Math::random() as f32) * 4.0,
+            };
+
+            // Replace oldest particles or extend if under limit
+            if self.particles.len() < 800 { // Allow more particles for magic brush
+                self.particles.push(new_particle);
+            } else {
+                // Replace the first particle that has low life
+                if let Some(old_particle) = self.particles.iter_mut().find(|p| p.life < 0.3) {
+                    *old_particle = new_particle;
+                } else {
+                    // Replace first particle as fallback
+                    self.particles[0] = new_particle;
+                }
+            }
+        }
     }
 }
 
