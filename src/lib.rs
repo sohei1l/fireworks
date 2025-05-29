@@ -288,7 +288,8 @@ impl App {
             let cluster_factor = (js_sys::Math::random() as f32).powf(1.8); // Less sparse, more stars
             
             if cluster_factor > 0.25 { // Lower threshold for more stars
-                let is_shooting = i < 3; // Only 3 shooting stars for realism
+                // let is_shooting = i < 3; // Only 3 shooting stars for realism
+                let is_shooting = false; // Shooting stars disabled
                 
                 // Random positioning with some clustering
                 let x = (js_sys::Math::random() as f32) * width as f32;
@@ -590,51 +591,52 @@ impl App {
         let dt = 0.016; // 60fps assumption
 
         // First pass - collect shooting star positions for trail spawning
-        let mut shooting_star_positions = Vec::new();
-        for particle in &self.particles {
-            if particle.is_shooting_star && particle.life > 0.5 {
-                shooting_star_positions.push((particle.x, particle.y, particle.vx, particle.vy));
-            }
-        }
+        // let mut shooting_star_positions = Vec::new();
+        // for particle in &self.particles {
+        //     if particle.is_shooting_star && particle.life > 0.5 {
+        //         shooting_star_positions.push((particle.x, particle.y, particle.vx, particle.vy));
+        //     }
+        // }
 
         for particle in &mut self.particles {
-            if particle.is_shooting_star {
-                // Shooting stars move across the sky
-                particle.x += particle.vx * dt;
-                particle.y += particle.vy * dt;
-                
-                // Fade shooting stars as they move
-                particle.life -= 0.01 * particle.fade_speed;
-                
-                // Reset shooting star when it goes off screen or fades out - but much less frequently
-                if particle.x > self.width + 200.0 || particle.y > self.height + 200.0 || particle.life <= 0.0 {
-                    // Long delay before respawning for realism
-                    if js_sys::Math::random() < 0.001 { // Very rare respawn chance
-                        // Respawn from random edge with more natural trajectories
-                        let spawn_side = js_sys::Math::random() as f32;
-                        if spawn_side < 0.7 { // Most come from upper left
-                            particle.x = -100.0 - (js_sys::Math::random() as f32) * 200.0;
-                            particle.y = (js_sys::Math::random() as f32) * self.height * 0.5; // Upper half
-                        } else { // Some come from top
-                            particle.x = (js_sys::Math::random() as f32) * self.width * 0.5;
-                            particle.y = -100.0 - (js_sys::Math::random() as f32) * 100.0;
-                        }
-                        
-                        // More natural, varied speeds and trajectories
-                        particle.vx = 40.0 + (js_sys::Math::random() as f32) * 100.0;
-                        particle.vy = 20.0 + (js_sys::Math::random() as f32) * 60.0;
-                        particle.life = 0.8 + (js_sys::Math::random() as f32) * 0.2;
-                        particle.creation_time = current_time;
-                    } else {
-                        // Keep it off screen until random respawn
-                        particle.x = -1000.0;
-                        particle.y = -1000.0;
-                        particle.vx = 0.0;
-                        particle.vy = 0.0;
-                        particle.life = 0.0;
-                    }
-                }
-            } else if particle.is_trail_particle {
+            // if particle.is_shooting_star {
+            //     // Shooting stars move across the sky
+            //     particle.x += particle.vx * dt;
+            //     particle.y += particle.vy * dt;
+            //     
+            //     // Fade shooting stars as they move
+            //     particle.life -= 0.01 * particle.fade_speed;
+            //     
+            //     // Reset shooting star when it goes off screen or fades out - but much less frequently
+            //     if particle.x > self.width + 200.0 || particle.y > self.height + 200.0 || particle.life <= 0.0 {
+            //         // Long delay before respawning for realism
+            //         if js_sys::Math::random() < 0.001 { // Very rare respawn chance
+            //             // Respawn from random edge with more natural trajectories
+            //             let spawn_side = js_sys::Math::random() as f32;
+            //             if spawn_side < 0.7 { // Most come from upper left
+            //                 particle.x = -100.0 - (js_sys::Math::random() as f32) * 200.0;
+            //                 particle.y = (js_sys::Math::random() as f32) * self.height * 0.5; // Upper half
+            //             } else { // Some come from top
+            //                 particle.x = (js_sys::Math::random() as f32) * self.width * 0.5;
+            //                 particle.y = -100.0 - (js_sys::Math::random() as f32) * 100.0;
+            //             }
+            //             
+            //             // More natural, varied speeds and trajectories
+            //             particle.vx = 40.0 + (js_sys::Math::random() as f32) * 100.0;
+            //             particle.vy = 20.0 + (js_sys::Math::random() as f32) * 60.0;
+            //             particle.life = 0.8 + (js_sys::Math::random() as f32) * 0.2;
+            //             particle.creation_time = current_time;
+            //         } else {
+            //             // Keep it off screen until random respawn
+            //             particle.x = -1000.0;
+            //             particle.y = -1000.0;
+            //             particle.vx = 0.0;
+            //             particle.vy = 0.0;
+            //             particle.life = 0.0;
+            //         }
+            //     }
+            // } else 
+            if particle.is_trail_particle {
                 // Trail particles fade quickly and don't move much
                 particle.life -= 0.02;
                 particle.vx *= 0.95;
@@ -675,31 +677,31 @@ impl App {
         self.particles.retain(|particle| particle.life > 0.0);
 
         // Spawn trail particles for shooting stars
-        for (star_x, star_y, star_vx, star_vy) in shooting_star_positions {
-            // Spawn trail particles behind the shooting star
-            for i in 0..2 {
-                let trail_offset = (i as f32 + 1.0) * 15.0; // Spacing between trail particles
-                let trail_x = star_x - (star_vx / star_vx.abs().max(1.0)) * trail_offset;
-                let trail_y = star_y - (star_vy / star_vy.abs().max(1.0)) * trail_offset;
-                
-                // Create trail particle
-                let trail_particle = Particle {
-                    x: trail_x,
-                    y: trail_y,
-                    vx: star_vx * 0.1, // Much slower than the main star
-                    vy: star_vy * 0.1,
-                    life: 1.0 - (i as f32 * 0.2), // Progressively dimmer but not too much
-                    color_index: 0.5 + (i as f32 * 0.2), // Ensure trail particles stay in trail range
-                    is_magic_brush: false,
-                    is_shooting_star: false,
-                    is_trail_particle: true,
-                    size_multiplier: 0.5 - (i as f32 * 0.1), // Smaller than main star
-                    fade_speed: 1.0,
-                    creation_time: current_time,
-                };
-                self.particles.push(trail_particle);
-            }
-        }
+        // for (star_x, star_y, star_vx, star_vy) in shooting_star_positions {
+        //     // Spawn trail particles behind the shooting star
+        //     for i in 0..2 {
+        //         let trail_offset = (i as f32 + 1.0) * 15.0; // Spacing between trail particles
+        //         let trail_x = star_x - (star_vx / star_vx.abs().max(1.0)) * trail_offset;
+        //         let trail_y = star_y - (star_vy / star_vy.abs().max(1.0)) * trail_offset;
+        //         
+        //         // Create trail particle
+        //         let trail_particle = Particle {
+        //             x: trail_x,
+        //             y: trail_y,
+        //             vx: star_vx * 0.1, // Much slower than the main star
+        //             vy: star_vy * 0.1,
+        //             life: 1.0 - (i as f32 * 0.2), // Progressively dimmer but not too much
+        //             color_index: 0.5 + (i as f32 * 0.2), // Ensure trail particles stay in trail range
+        //             is_magic_brush: false,
+        //             is_shooting_star: false,
+        //             is_trail_particle: true,
+        //             size_multiplier: 0.5 - (i as f32 * 0.1), // Smaller than main star
+        //             fade_speed: 1.0,
+        //             creation_time: current_time,
+        //         };
+        //         self.particles.push(trail_particle);
+        //     }
+        // }
     }
 
     fn render_particles(&mut self, current_time: f64) {
