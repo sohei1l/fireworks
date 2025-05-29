@@ -27,7 +27,7 @@
       }
 
       #project-title {
-        color: #000000;
+        color: #888888;
         font-size: 24px;
         font-weight: bold;
         margin: 0 0 8px 0;
@@ -35,7 +35,7 @@
       }
 
       #github-link {
-        color: #000;
+        color: #888888;
         font-size: 14px;
         text-decoration: none;
         margin-bottom: 15px;
@@ -70,54 +70,6 @@
         text-align: center;
       }
 
-      #controls {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        color: #161414;
-        font-size: 14px;
-        z-index: 100;
-        background: rgba(0, 0, 0, 0.85);
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-        min-width: 200px;
-      }
-
-      #controls h3 {
-        margin: 0 0 10px 0;
-        color: #00ffff;
-        font-size: 16px;
-        text-align: center;
-      }
-
-      #controls label {
-        display: block;
-        margin: 8px 0;
-        cursor: pointer;
-        transition: color 0.3s ease;
-        color: #ffffff;
-      }
-
-      #controls label:hover {
-        color: #00ffff;
-      }
-
-      #controls input[type="checkbox"] {
-        margin-right: 8px;
-        transform: scale(1.2);
-      }
-
-      #controls input[type="range"] {
-        width: 120px;
-        margin-left: 8px;
-      }
-
-      #friction-value {
-        color: #00ff00;
-        font-weight: bold;
-      }
     </style>
   </head>
   <body>
@@ -134,34 +86,6 @@
       </a>
     </div>
 
-    <div id="controls">
-      <h3>Controls</h3>
-      <label>
-        <input type="checkbox" id="gravity-toggle" checked /> Gravity
-      </label>
-      <label>
-        <input type="checkbox" id="bloom-toggle" checked /> Bloom Effect
-      </label>
-      <label>
-        <input type="checkbox" id="trails-toggle" checked /> Particle Trails
-      </label>
-      <label>
-        <input type="checkbox" id="magic-brush-toggle" checked /> Auto Trail
-      </label>
-      <label>
-        Friction:
-        <input
-          type="range"
-          id="friction-slider"
-          min="0.9"
-          max="1.0"
-          step="0.01"
-          value="0.95"
-        />
-        <span id="friction-value">0.95</span>
-      </label>
-      <div id="fps">FPS: --</div>
-    </div>
 
     <script type="module">
       async function run() {
@@ -205,23 +129,20 @@
             }
           });
 
-          // Add mouse move event listener for magic brush
-          let magicBrushEnabled = true;
+          // Magic brush is always enabled
           let isTouching = false; // Track if user is touching for mobile
 
           canvas.addEventListener("mousemove", (event) => {
             try {
-              if (magicBrushEnabled) {
-                const rect = canvas.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
+              const rect = canvas.getBoundingClientRect();
+              const x = event.clientX - rect.left;
+              const y = event.clientY - rect.top;
 
-                // Scale to canvas internal coordinates
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
+              // Scale to canvas internal coordinates
+              const scaleX = canvas.width / rect.width;
+              const scaleY = canvas.height / rect.height;
 
-                app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
-              }
+              app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
             } catch (e) {
               console.error("Error with magic brush:", e);
             }
@@ -233,18 +154,16 @@
               event.preventDefault(); // Prevent scrolling
               isTouching = true;
 
-              if (magicBrushEnabled) {
-                const rect = canvas.getBoundingClientRect();
-                const touch = event.touches[0];
-                const x = touch.clientX - rect.left;
-                const y = touch.clientY - rect.top;
+              const rect = canvas.getBoundingClientRect();
+              const touch = event.touches[0];
+              const x = touch.clientX - rect.left;
+              const y = touch.clientY - rect.top;
 
-                // Scale to canvas internal coordinates
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
+              // Scale to canvas internal coordinates
+              const scaleX = canvas.width / rect.width;
+              const scaleY = canvas.height / rect.height;
 
-                app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
-              }
+              app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
             } catch (e) {
               console.error("Error with touch start:", e);
             }
@@ -254,7 +173,7 @@
             try {
               event.preventDefault(); // Prevent scrolling
 
-              if (magicBrushEnabled && isTouching) {
+              if (isTouching) {
                 const rect = canvas.getBoundingClientRect();
                 const touch = event.touches[0];
                 const x = touch.clientX - rect.left;
@@ -289,102 +208,23 @@
             }
           });
 
-          // Add control event listeners
-          const gravityToggle = document.getElementById("gravity-toggle");
-
-          // Set initial gravity state to match app default
-          app.set_gravity(true);
-
-          gravityToggle.addEventListener("change", (event) => {
-            try {
-              app.set_gravity(event.target.checked);
-              console.log("Gravity set to:", event.target.checked);
-            } catch (e) {
-              console.error("Error setting gravity:", e);
-            }
-          });
-
-          const bloomToggle = document.getElementById("bloom-toggle");
-          bloomToggle.addEventListener("change", (event) => {
-            try {
-              app.set_bloom(event.target.checked);
-              console.log("Bloom set to:", event.target.checked);
-            } catch (e) {
-              console.error("Error setting bloom:", e);
-            }
-          });
-
-          const trailsToggle = document.getElementById("trails-toggle");
-          trailsToggle.addEventListener("change", (event) => {
-            try {
-              app.set_trails(event.target.checked);
-              console.log("Trails set to:", event.target.checked);
-            } catch (e) {
-              console.error("Error setting trails:", e);
-            }
-          });
-
-          const magicBrushToggle =
-            document.getElementById("magic-brush-toggle");
-          
-          // Function to update cursor based on auto trail state
-          function updateCursor() {
-            canvas.style.cursor = magicBrushEnabled ? "crosshair" : "default";
-          }
-          
-          // Set initial cursor
-          updateCursor();
-          
-          magicBrushToggle.addEventListener("change", (event) => {
-            try {
-              magicBrushEnabled = event.target.checked;
-              updateCursor(); // Update cursor when toggle changes
-              console.log("Magic brush set to:", magicBrushEnabled);
-            } catch (e) {
-              console.error("Error setting magic brush:", e);
-            }
-          });
-
-          const frictionSlider = document.getElementById("friction-slider");
-          const frictionValue = document.getElementById("friction-value");
-
-          // Set initial friction value to match the app default
+          // Set app defaults - all features optimized for magic brush writing
+          app.set_gravity(false);
+          app.set_bloom(true);
+          app.set_trails(true);
           app.set_friction(0.95);
-
-          frictionSlider.addEventListener("input", (event) => {
-            try {
-              const value = parseFloat(event.target.value);
-              app.set_friction(value);
-              frictionValue.textContent = value.toFixed(2);
-              console.log("Friction set to:", value);
-            } catch (e) {
-              console.error("Error setting friction:", e);
-            }
-          });
+          
+          // Set cursor for magic brush
+          canvas.style.cursor = "crosshair";
 
           console.log("Starting render loop...");
-          let frameCount = 0;
-          let lastTime = 0;
-          const fpsElement = document.getElementById("fps");
 
           function frame(time) {
             try {
               app.render(time);
-
-              // Update FPS display every 60 frames
-              frameCount++;
-              if (frameCount % 60 === 0) {
-                if (lastTime > 0) {
-                  const fps = 60000 / (time - lastTime);
-                  fpsElement.textContent = `FPS: ${fps.toFixed(1)}`;
-                }
-                lastTime = time;
-              }
-
               requestAnimationFrame(frame);
             } catch (e) {
               console.error("Error in render loop:", e);
-              fpsElement.textContent = "FPS: ERROR";
             }
           }
 

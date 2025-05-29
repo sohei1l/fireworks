@@ -9,7 +9,13 @@ struct Particle {
     vy: f32,
     life: f32,
     color_index: f32,
+    is_magic_brush: bool,
+    size_multiplier: f32,
+    fade_speed: f32,
+    is_shooting_star: bool,
+    is_trail_particle: bool,
 }
+
 
 // Import the `console.log` function from the browser
 #[wasm_bindgen]
@@ -70,6 +76,8 @@ pub struct App {
     blur_program: WebGlProgram,
     // Trails
     trails_enabled: bool,
+    // Northern lights
+    northern_lights_program: WebGlProgram,
 }
 
 #[wasm_bindgen]
@@ -117,12 +125,17 @@ impl App {
             
             void main() {
                 vec2 uv = gl_FragCoord.xy / resolution.xy;
-                vec3 color = vec3(
-                    0.5 + 0.5 * sin(time * 0.001 + uv.x * 3.0),
-                    0.5 + 0.5 * sin(time * 0.002 + uv.y * 3.0),
-                    0.5 + 0.5 * sin(time * 0.003 + (uv.x + uv.y) * 3.0)
-                );
-                gl_FragColor = vec4(color * 0.3, 1.0);
+                
+                // Create a dark night sky with subtle gradient
+                float skyGradient = smoothstep(0.0, 1.0, uv.y);
+                vec3 darkBlue = vec3(0.02, 0.02, 0.08); // Very dark blue at bottom
+                vec3 midnightBlue = vec3(0.01, 0.01, 0.05); // Even darker at top
+                
+                vec3 skyColor = mix(darkBlue, midnightBlue, skyGradient);
+                
+                // Remove the background shader stars - they're causing the purple dots issue
+                
+                gl_FragColor = vec4(skyColor, 1.0);
             }
         "#).map_err(|e| JsValue::from_str(&format!("Fragment shader error: {}", e)))?;
 
@@ -152,16 +165,30 @@ impl App {
             attribute vec2 position;
             attribute float life;
             attribute float colorIndex;
+            attribute float isMagicBrush;
+            attribute float sizeMultiplier;
             uniform vec2 resolution;
             varying float v_life;
             varying float v_colorIndex;
+            varying float v_isMagicBrush;
             
             void main() {
                 vec2 clipspace = (position / resolution) * 2.0 - 1.0;
                 gl_Position = vec4(clipspace * vec2(1, -1), 0.0, 1.0);
-                gl_PointSize = 12.0 + life * 8.0; // Bigger particles, varying with life
+                
+                // Base size with variation
+                float baseSize;
+                if (isMagicBrush > 0.5) {
+                    baseSize = 18.0 + life * 12.0; // Bigger magic brush particles
+                } else {
+                    baseSize = 8.0 + life * 4.0; // Smaller regular particles
+                }
+                
+                gl_PointSize = baseSize * sizeMultiplier;
+                
                 v_life = life;
                 v_colorIndex = colorIndex;
+                v_isMagicBrush = isMagicBrush;
             }
         "#).map_err(|e| JsValue::from_str(&format!("Particle vertex shader error: {}", e)))?;
 
@@ -169,32 +196,93 @@ impl App {
             precision mediump float;
             varying float v_life;
             varying float v_colorIndex;
+            varying float v_isMagicBrush;
             uniform vec3 u_color0;
             uniform vec3 u_color1;
             uniform vec3 u_color2;
             uniform vec3 u_color3;
+            uniform float u_time;
             
             void main() {
                 vec2 center = vec2(0.5);
                 float dist = distance(gl_PointCoord, center);
                 if (dist > 0.5) discard;
                 
-                // Cycle through colors based on life and color index
-                float paletteIndex = mod(v_colorIndex + (1.0 - v_life) * 3.0, 4.0);
-                
-                vec3 color;
-                if (paletteIndex < 1.0) {
-                    color = mix(u_color0, u_color1, paletteIndex);
-                } else if (paletteIndex < 2.0) {
-                    color = mix(u_color1, u_color2, paletteIndex - 1.0);
-                } else if (paletteIndex < 3.0) {
-                    color = mix(u_color2, u_color3, paletteIndex - 2.0);
+                if (v_isMagicBrush > 0.5) {
+                    // Light painting photography effect - warm yellowish light colors
+                    vec3 warmYellow = vec3(1.0, 0.9, 0.3);      // Warm yellow
+                    vec3 brightYellow = vec3(1.0, 1.0, 0.4);    // Bright yellow
+                    vec3 orangeYellow = vec3(1.0, 0.7, 0.2);    // Orange yellow
+                    vec3 creamWhite = vec3(1.0, 0.95, 0.8);     // Cream white
+                    vec3 goldYellow = vec3(1.0, 0.8, 0.1);      // Gold yellow
+                    vec3 paleYellow = vec3(1.0, 0.98, 0.7);     // Pale yellow
+                    
+                    // Yellowish light painting color selection
+                    vec3 color;
+                    float lightSelector = mod(v_colorIndex - 8.0, 6.0); // Adjust for new color range
+                    
+                    if (lightSelector < 1.0) {
+                        color = mix(warmYellow, brightYellow, lightSelector);
+                    } else if (lightSelector < 2.0) {
+                        color = mix(brightYellow, orangeYellow, lightSelector - 1.0);
+                    } else if (lightSelector < 3.0) {
+                        color = mix(orangeYellow, creamWhite, lightSelector - 2.0);
+                    } else if (lightSelector < 4.0) {
+                        color = mix(creamWhite, goldYellow, lightSelector - 3.0);
+                    } else if (lightSelector < 5.0) {
+                        color = mix(goldYellow, paleYellow, lightSelector - 4.0);
+                    } else {
+                        color = mix(paleYellow, warmYellow, lightSelector - 5.0);
+                    }
+                    
+                    // Intense glow effect like long exposure photography
+                    float glow = 1.0 - dist * 0.8; // Softer falloff for glow
+                    glow = pow(glow, 0.5); // Gamma correction for realistic light
+                    
+                    // Photography-style light painting with bloom
+                    float coreIntensity = 1.0 - dist * 2.0; // Bright core
+                    float bloomIntensity = (1.0 - dist * 0.3) * 0.6; // Wide bloom
+                    
+                    float totalIntensity = max(coreIntensity, bloomIntensity) * v_life;
+                    
+                    gl_FragColor = vec4(color * 1.5, totalIntensity); // Brighter for light painting effect
                 } else {
-                    color = mix(u_color3, u_color0, paletteIndex - 3.0);
+                    // Background particles are stars that twinkle, or trail particles
+                    float time = u_time * 0.001;
+                    
+                    // Only check for trail particles if they have the right characteristics
+                    bool isTrail = v_colorIndex < 1.5 && v_life < 0.8 && v_life > 0.1; // More specific trail detection
+                    
+                    if (isTrail) {
+                        // Trail particles - bright white/yellow, fade quickly
+                        vec3 trailColor = mix(vec3(1.0, 1.0, 0.8), vec3(1.0, 0.8, 0.4), v_life);
+                        float trailAlpha = (1.0 - dist * 2.0) * v_life * v_life; // Quadratic fade
+                        trailAlpha = max(0.0, trailAlpha);
+                        gl_FragColor = vec4(trailColor, trailAlpha);
+                    } else {
+                        // Regular stars - realistic twinkling
+                        // Much slower, more subtle twinkling based on position
+                        float twinkleSpeed = 0.5 + v_colorIndex * 0.3; // Different stars twinkle at different rates
+                        float twinkle = sin(time * twinkleSpeed + v_colorIndex * 6.28) * 0.3 + 0.7; // Subtler variation
+                        
+                        // More varied star colors - from blue-white to yellow-white to red
+                        vec3 starColor;
+                        float colorTemp = v_colorIndex * 0.3; // Color temperature variation
+                        if (colorTemp < 0.3) {
+                            starColor = mix(vec3(0.9, 0.9, 1.0), vec3(1.0, 1.0, 1.0), colorTemp * 3.33); // Blue-white
+                        } else if (colorTemp < 0.6) {
+                            starColor = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.95, 0.8), (colorTemp - 0.3) * 3.33); // White to warm
+                        } else {
+                            starColor = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.8, 0.6), (colorTemp - 0.6) * 2.5); // Warm to orange
+                        }
+                        
+                        // Stars appear as tiny points with subtle twinkling
+                        float starAlpha = (1.0 - dist * 4.0) * v_life * twinkle;
+                        starAlpha = max(0.0, starAlpha);
+                        
+                        gl_FragColor = vec4(starColor, starAlpha);
+                    }
                 }
-                
-                float alpha = v_life * (1.0 - dist * 2.0);
-                gl_FragColor = vec4(color, alpha);
             }
         "#).map_err(|e| JsValue::from_str(&format!("Particle fragment shader error: {}", e)))?;
 
@@ -204,17 +292,51 @@ impl App {
         // Create particle buffer for dynamic data
         let particle_buffer = gl.create_buffer().ok_or("Failed to create particle buffer")?;
 
-        // Initialize particles
+        // Initialize particles with realistic star distribution
         let mut particles = Vec::new();
-        for _ in 0..100 {
-            particles.push(Particle {
-                x: (js_sys::Math::random() as f32) * width as f32,
-                y: (js_sys::Math::random() as f32) * height as f32,
-                vx: (js_sys::Math::random() as f32 - 0.5) * 100.0,
-                vy: (js_sys::Math::random() as f32 - 0.5) * 100.0,
-                life: 1.0,
-                color_index: (js_sys::Math::random() as f32) * 4.0,
-            });
+        
+        // Create realistic star field with varied density
+        for i in 0..300 {
+            // Create clusters and sparse areas like real night sky
+            let cluster_factor = (js_sys::Math::random() as f32).powf(1.8); // Less sparse, more stars
+            
+            if cluster_factor > 0.25 { // Lower threshold for more stars
+                let is_shooting = i < 3; // Only 3 shooting stars for realism
+                
+                // Random positioning with some clustering
+                let x = (js_sys::Math::random() as f32) * width as f32;
+                let y = (js_sys::Math::random() as f32) * height as f32;
+                
+                particles.push(Particle {
+                    x,
+                    y,
+                    vx: if is_shooting { 
+                        60.0 + (js_sys::Math::random() as f32) * 120.0 // Varied shooting star speeds
+                    } else { 0.0 },
+                    vy: if is_shooting { 
+                        30.0 + (js_sys::Math::random() as f32) * 80.0 // Varied angles
+                    } else { 0.0 },
+                    life: if is_shooting { 
+                        0.7 + (js_sys::Math::random() as f32) * 0.3 // Shooting stars start with varied life
+                    } else { 
+                        0.8 + (js_sys::Math::random() as f32) * 0.2 // Background stars have varied brightness
+                    },
+                    color_index: (js_sys::Math::random() as f32) * 4.0,
+                    is_magic_brush: false,
+                    size_multiplier: if is_shooting { 
+                        1.2 + (js_sys::Math::random() as f32) * 1.5 // Very varied shooting star sizes
+                    } else { 
+                        0.2 + (js_sys::Math::random() as f32) * 1.0 // Much more varied star sizes
+                    },
+                    fade_speed: if is_shooting { 
+                        0.2 + (js_sys::Math::random() as f32) * 0.4 // Varied shooting star fade
+                    } else { 
+                        0.05 + (js_sys::Math::random() as f32) * 0.15 // Very slow, varied star twinkle
+                    },
+                    is_shooting_star: is_shooting,
+                    is_trail_particle: false,
+                });
+            }
         }
 
         // Create framebuffer for bloom effect
@@ -277,12 +399,91 @@ impl App {
         let blur_program = link_program(&gl, &blur_vert_shader, &blur_frag_shader)
             .map_err(|e| JsValue::from_str(&format!("Blur program linking error: {}", e)))?;
 
+        // Create northern lights background shader (replacing artifact shader)
+        let northern_lights_vert_shader = compile_shader(&gl, GL::VERTEX_SHADER, r#"
+            attribute vec2 position;
+            varying vec2 v_texCoord;
+            
+            void main() {
+                gl_Position = vec4(position, 0.0, 1.0);
+                v_texCoord = (position + 1.0) * 0.5;
+            }
+        "#).map_err(|e| JsValue::from_str(&format!("Northern lights vertex shader error: {}", e)))?;
+
+        let northern_lights_frag_shader = compile_shader(&gl, GL::FRAGMENT_SHADER, r#"
+            precision mediump float;
+            varying vec2 v_texCoord;
+            uniform float u_time;
+            uniform vec2 u_resolution;
+            
+            void main() {
+                vec2 uv = v_texCoord;
+                float time = u_time * 0.00008; // Much slower, more realistic movement
+                
+                // More subtle aurora bands with gentle movement
+                float curtain1 = sin(uv.x * 1.8 + time * 0.8) * cos(uv.x * 1.2 + time * 0.6) * 0.3;
+                float curtain2 = sin(uv.x * 2.2 - time * 0.5) * cos(uv.x * 1.6 - time * 0.4) * 0.25;
+                
+                // Add gentle flowing organic movement
+                float organic1 = sin(uv.x * 3.0 + time * 0.7) * sin(uv.y * 2.0 + time * 0.3) * 0.15;
+                float organic2 = cos(uv.x * 2.5 - time * 0.4) * cos(uv.y * 1.8 - time * 0.2) * 0.12;
+                
+                // Aurora spans across more of the screen with gentle movement
+                float screenLimit = smoothstep(0.9, 0.1, uv.x + sin(time * 0.2) * 0.05); // Subtle moving boundary across more screen
+                
+                // Two aurora bands with more vertical separation
+                float aurora1_height = 0.20 + curtain1 * 0.12 + organic1;
+                float aurora2_height = 0.50 + curtain2 * 0.10 + organic2;
+                
+                // Dynamic thickness that changes more dramatically
+                float thickness1 = 0.05 + sin(time * 1.2 + uv.x * 3.0) * 0.04;
+                float thickness2 = 0.07 + cos(time * 1.0 - uv.x * 2.5) * 0.05;
+                
+                // Calculate fade for each aurora band
+                float fade1 = smoothstep(aurora1_height - thickness1, aurora1_height - thickness1 * 0.3, uv.y) * 
+                             smoothstep(aurora1_height + thickness1, aurora1_height + thickness1 * 0.3, uv.y);
+                             
+                float fade2 = smoothstep(aurora2_height - thickness2, aurora2_height - thickness2 * 0.3, uv.y) * 
+                             smoothstep(aurora2_height + thickness2, aurora2_height + thickness2 * 0.3, uv.y);
+                
+                // Apply screen limitation
+                fade1 *= screenLimit;
+                fade2 *= screenLimit;
+                
+                // More dynamic green to blue gradient colors
+                vec3 brightGreen = vec3(0.0, 1.0, 0.4);   // Bright green
+                vec3 deepGreen = vec3(0.0, 0.8, 0.2);    // Deep green
+                vec3 blueGreen = vec3(0.0, 0.9, 0.7);    // Blue-green
+                vec3 skyBlue = vec3(0.2, 0.7, 1.0);      // Sky blue
+                
+                // Faster color transitions
+                vec3 color1 = mix(brightGreen, blueGreen, sin(time * 1.5 + uv.x * 2.0) * 0.5 + 0.5);
+                vec3 color2 = mix(deepGreen, skyBlue, sin(time * 1.8 - uv.x * 2.5) * 0.5 + 0.5);
+                
+                // Combine aurora bands
+                vec3 finalColor = color1 * fade1 + color2 * fade2;
+                
+                // More dynamic vertical streaks
+                float streaks = sin(uv.x * 25.0 + time * 4.0) * sin(uv.y * 12.0 + time * 3.0) * 0.08 + 0.92;
+                
+                // More pronounced breathing effect
+                float intensity = 0.5 + sin(time * 0.6) * 0.25;
+                
+                float totalAlpha = (fade1 + fade2) * intensity * streaks;
+                gl_FragColor = vec4(finalColor, totalAlpha);
+            }
+        "#).map_err(|e| JsValue::from_str(&format!("Northern lights fragment shader error: {}", e)))?;
+
+        let northern_lights_program = link_program(&gl, &northern_lights_vert_shader, &northern_lights_frag_shader)
+            .map_err(|e| JsValue::from_str(&format!("Northern lights program linking error: {}", e)))?;
+
+
         // Clear color
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.enable(GL::BLEND);
         gl.blend_func(GL::SRC_ALPHA, GL::ONE);
 
-        console_log!("WebGL setup complete with {} particles and bloom effect", particles.len());
+        console_log!("WebGL setup complete with {} particles, northern lights, and starry night theme", particles.len());
 
         Ok(App {
             gl,
@@ -295,7 +496,7 @@ impl App {
             particles,
             width: width as f32,
             height: height as f32,
-            gravity_enabled: true,
+            gravity_enabled: false,
             gravity: 200.0,
             friction: 0.95,
             bloom_enabled: true,
@@ -303,6 +504,7 @@ impl App {
             texture,
             blur_program,
             trails_enabled: true,
+            northern_lights_program,
         })
     }
 
@@ -372,9 +574,12 @@ impl App {
         // Draw the quad
         self.gl.draw_arrays(GL::TRIANGLES, 0, 6);
 
+        // Render northern lights background
+        self.render_northern_lights(current_time);
+        
         // Update and render particles
         self.update_particles(current_time);
-        self.render_particles();
+        self.render_particles(current_time);
 
         if self.bloom_enabled {
             // Render the blurred result to screen
@@ -406,51 +611,141 @@ impl App {
     fn update_particles(&mut self, _current_time: f64) {
         let dt = 0.016; // 60fps assumption
 
+        // First pass - collect shooting star positions for trail spawning
+        let mut shooting_star_positions = Vec::new();
+        for particle in &self.particles {
+            if particle.is_shooting_star && particle.life > 0.5 {
+                shooting_star_positions.push((particle.x, particle.y, particle.vx, particle.vy));
+            }
+        }
+
         for particle in &mut self.particles {
-            // Apply gravity
-            if self.gravity_enabled {
-                particle.vy += self.gravity * dt;
+            if particle.is_shooting_star {
+                // Shooting stars move across the sky
+                particle.x += particle.vx * dt;
+                particle.y += particle.vy * dt;
+                
+                // Fade shooting stars as they move
+                particle.life -= 0.01 * particle.fade_speed;
+                
+                // Reset shooting star when it goes off screen or fades out - but much less frequently
+                if particle.x > self.width + 200.0 || particle.y > self.height + 200.0 || particle.life <= 0.0 {
+                    // Long delay before respawning for realism
+                    if js_sys::Math::random() < 0.001 { // Very rare respawn chance
+                        // Respawn from random edge with more natural trajectories
+                        let spawn_side = js_sys::Math::random() as f32;
+                        if spawn_side < 0.7 { // Most come from upper left
+                            particle.x = -100.0 - (js_sys::Math::random() as f32) * 200.0;
+                            particle.y = (js_sys::Math::random() as f32) * self.height * 0.5; // Upper half
+                        } else { // Some come from top
+                            particle.x = (js_sys::Math::random() as f32) * self.width * 0.5;
+                            particle.y = -100.0 - (js_sys::Math::random() as f32) * 100.0;
+                        }
+                        
+                        // More natural, varied speeds and trajectories
+                        particle.vx = 40.0 + (js_sys::Math::random() as f32) * 100.0;
+                        particle.vy = 20.0 + (js_sys::Math::random() as f32) * 60.0;
+                        particle.life = 0.8 + (js_sys::Math::random() as f32) * 0.2;
+                    } else {
+                        // Keep it off screen until random respawn
+                        particle.x = -1000.0;
+                        particle.y = -1000.0;
+                        particle.vx = 0.0;
+                        particle.vy = 0.0;
+                        particle.life = 0.0;
+                    }
+                }
+            } else if particle.is_trail_particle {
+                // Trail particles fade quickly and don't move much
+                particle.life -= 0.02;
+                particle.vx *= 0.95;
+                particle.vy *= 0.95;
+                particle.x += particle.vx * dt;
+                particle.y += particle.vy * dt;
+            } else if particle.is_magic_brush {
+                // Light painting particles - smooth, flowing movement
+                if self.gravity_enabled {
+                    particle.vy += self.gravity * dt * 0.05; // Almost no gravity for light painting
+                }
+                
+                particle.vx *= 0.995; // Very minimal air resistance for smooth trails
+                particle.vy *= 0.995;
+                
+                particle.x += particle.vx * dt;
+                particle.y += particle.vy * dt;
+                
+                // Light painting fade (15 seconds): 1.0 / (15 * 60) = 0.0011
+                particle.life -= 0.0011 * particle.fade_speed;
+            } else {
+                // Regular stars - completely static, just twinkling
+                // No movement at all - real stars don't move noticeably
+                
+                // Stars very slowly vary in brightness (much more subtle)
+                particle.life -= 0.0002 * particle.fade_speed;
+                
+                // Prevent stars from fading completely - they should stay visible
+                if particle.life < 0.6 {
+                    particle.life = 0.6 + (js_sys::Math::random() as f32) * 0.4;
+                }
             }
-
-            // Apply friction
-            particle.vx *= self.friction;
-            particle.vy *= self.friction;
-
-            // Simple motion
-            particle.x += particle.vx * dt;
-            particle.y += particle.vy * dt;
-
-            // Bounce off edges with some energy loss
-            if particle.x < 0.0 || particle.x > self.width {
-                particle.vx = -particle.vx * 0.8; // Energy loss on bounce
-                particle.x = particle.x.max(0.0).min(self.width);
-            }
-            if particle.y < 0.0 || particle.y > self.height {
-                particle.vy = -particle.vy * 0.8; // Energy loss on bounce
-                particle.y = particle.y.max(0.0).min(self.height);
-            }
-
-            // Fade particles slowly
-            particle.life -= 0.002;
-            if particle.life <= 0.0 {
-                // Respawn particle
+            
+            if particle.life <= 0.0 && !particle.is_shooting_star {
+                // Respawn as regular star (not shooting star)
                 particle.x = (js_sys::Math::random() as f32) * self.width;
                 particle.y = (js_sys::Math::random() as f32) * self.height;
-                particle.vx = (js_sys::Math::random() as f32 - 0.5) * 100.0;
-                particle.vy = (js_sys::Math::random() as f32 - 0.5) * 100.0;
+                particle.vx = 0.0;
+                particle.vy = 0.0;
                 particle.life = 1.0;
                 particle.color_index = (js_sys::Math::random() as f32) * 4.0;
+                particle.is_magic_brush = false;
+                particle.is_shooting_star = false;
+                particle.size_multiplier = 0.3 + (js_sys::Math::random() as f32) * 0.7;
+                particle.fade_speed = 0.1 + (js_sys::Math::random() as f32) * 0.2;
+                particle.is_trail_particle = false;
+            }
+        }
+
+        // Spawn trail particles for shooting stars
+        for (star_x, star_y, star_vx, star_vy) in shooting_star_positions {
+            // Spawn trail particles behind the shooting star
+            for i in 0..2 {
+                let trail_offset = (i as f32 + 1.0) * 15.0; // Spacing between trail particles
+                let trail_x = star_x - (star_vx / star_vx.abs().max(1.0)) * trail_offset;
+                let trail_y = star_y - (star_vy / star_vy.abs().max(1.0)) * trail_offset;
+                
+                // Find an expired particle to replace with trail
+                if let Some(expired_particle) = self.particles.iter_mut().find(|p| p.life <= 0.0 && !p.is_shooting_star) {
+                    *expired_particle = Particle {
+                        x: trail_x,
+                        y: trail_y,
+                        vx: star_vx * 0.1, // Much slower than the main star
+                        vy: star_vy * 0.1,
+                        life: 1.0 - (i as f32 * 0.2), // Progressively dimmer but not too much
+                        color_index: 0.5 + (i as f32 * 0.2), // Ensure trail particles stay in trail range
+                        is_magic_brush: false,
+                        is_shooting_star: false,
+                        is_trail_particle: true,
+                        size_multiplier: 0.5 - (i as f32 * 0.1), // Smaller than main star
+                        fade_speed: 1.0,
+                    };
+                }
             }
         }
     }
 
-    fn render_particles(&mut self) {
+    fn render_particles(&mut self, current_time: f64) {
         // Use particle shader
         self.gl.use_program(Some(&self.particle_program));
 
         // Set resolution uniform
         let resolution_location = self.gl.get_uniform_location(&self.particle_program, "resolution");
         self.gl.uniform2f(resolution_location.as_ref(), self.width, self.height);
+        
+        // Set time uniform for twinkling stars
+        let time_location = self.gl.get_uniform_location(&self.particle_program, "u_time");
+        if let Some(location) = time_location {
+            self.gl.uniform1f(Some(&location), current_time as f32);
+        }
 
         // Set color uniforms - neon colors
         let color0_location = self.gl.get_uniform_location(&self.particle_program, "u_color0");
@@ -470,13 +765,15 @@ impl App {
             self.gl.uniform3f(Some(&location), 1.0, 1.0, 0.0); // Yellow
         }
 
-        // Prepare particle data with color index
+        // Prepare particle data with all attributes
         let mut vertex_data = Vec::new();
         for particle in &self.particles {
             vertex_data.push(particle.x);
             vertex_data.push(particle.y);
             vertex_data.push(particle.life);
             vertex_data.push(particle.color_index);
+            vertex_data.push(if particle.is_magic_brush { 1.0 } else { 0.0 });
+            vertex_data.push(particle.size_multiplier);
         }
 
         // Upload particle data
@@ -490,18 +787,52 @@ impl App {
         let position_location = self.gl.get_attrib_location(&self.particle_program, "position") as u32;
         let life_location = self.gl.get_attrib_location(&self.particle_program, "life") as u32;
         let color_index_location = self.gl.get_attrib_location(&self.particle_program, "colorIndex") as u32;
+        let magic_brush_location = self.gl.get_attrib_location(&self.particle_program, "isMagicBrush") as u32;
+        let size_location = self.gl.get_attrib_location(&self.particle_program, "sizeMultiplier") as u32;
 
         self.gl.enable_vertex_attrib_array(position_location);
         self.gl.enable_vertex_attrib_array(life_location);
         self.gl.enable_vertex_attrib_array(color_index_location);
+        self.gl.enable_vertex_attrib_array(magic_brush_location);
+        self.gl.enable_vertex_attrib_array(size_location);
 
-        let stride = 4 * 4; // 4 floats * 4 bytes
+        let stride = 6 * 4; // 6 floats * 4 bytes
         self.gl.vertex_attrib_pointer_with_i32(position_location, 2, GL::FLOAT, false, stride, 0);
         self.gl.vertex_attrib_pointer_with_i32(life_location, 1, GL::FLOAT, false, stride, 8);
         self.gl.vertex_attrib_pointer_with_i32(color_index_location, 1, GL::FLOAT, false, stride, 12);
+        self.gl.vertex_attrib_pointer_with_i32(magic_brush_location, 1, GL::FLOAT, false, stride, 16);
+        self.gl.vertex_attrib_pointer_with_i32(size_location, 1, GL::FLOAT, false, stride, 20);
 
         // Draw particles as points
         self.gl.draw_arrays(GL::POINTS, 0, self.particles.len() as i32);
+    }
+
+    fn render_northern_lights(&mut self, current_time: f64) {
+        // Use northern lights shader
+        self.gl.use_program(Some(&self.northern_lights_program));
+        
+        // Set uniforms
+        let time_location = self.gl.get_uniform_location(&self.northern_lights_program, "u_time");
+        if let Some(location) = time_location {
+            self.gl.uniform1f(Some(&location), current_time as f32);
+        }
+        
+        let resolution_location = self.gl.get_uniform_location(&self.northern_lights_program, "u_resolution");
+        if let Some(location) = resolution_location {
+            self.gl.uniform2f(Some(&location), self.width, self.height);
+        }
+
+        // Use the same vertex buffer as the background
+        self.gl.bind_buffer(GL::ARRAY_BUFFER, Some(&self.vertex_buffer));
+        let position_location = self.gl.get_attrib_location(&self.northern_lights_program, "position") as u32;
+        self.gl.enable_vertex_attrib_array(position_location);
+        self.gl.vertex_attrib_pointer_with_i32(position_location, 2, GL::FLOAT, false, 0, 0);
+
+        // Set blend mode for northern lights overlay
+        self.gl.blend_func(GL::SRC_ALPHA, GL::ONE);
+        
+        // Draw the northern lights
+        self.gl.draw_arrays(GL::TRIANGLES, 0, 6);
     }
 
     #[wasm_bindgen]
@@ -520,19 +851,22 @@ impl App {
                 vy: angle.sin() * speed,
                 life: 1.0,
                 color_index: (js_sys::Math::random() as f32) * 4.0,
+                is_magic_brush: false,
+                is_shooting_star: false,
+                is_trail_particle: false,
+                size_multiplier: 0.5 + (js_sys::Math::random() as f32) * 1.5,
+                fade_speed: 0.5 + (js_sys::Math::random() as f32) * 1.0,
             };
 
-            // Replace oldest particles or extend if under limit
-            if self.particles.len() < 500 {
+            // Only add regular particles if we have plenty of space (preserve magic brush priority)
+            if self.particles.len() < 800 {
                 self.particles.push(new_particle);
             } else {
-                // Replace the first particle that has low life
-                if let Some(old_particle) = self.particles.iter_mut().find(|p| p.life < 0.3) {
+                // Only replace background stars, never magic brush or shooting stars
+                if let Some(old_particle) = self.particles.iter_mut().find(|p| !p.is_magic_brush && !p.is_shooting_star && p.life < 0.5) {
                     *old_particle = new_particle;
-                } else {
-                    // Replace first particle as fallback
-                    self.particles[0] = new_particle;
                 }
+                // If no suitable replacement found, just don't add this particle
             }
         }
     }
@@ -563,14 +897,14 @@ impl App {
 
     #[wasm_bindgen]
     pub fn spawn_magic_brush_particles(&mut self, x: f32, y: f32) {
-        // Spawn more impressive magic brush particles (4-5 particles)
-        for _ in 0..4 {
+        // Spawn more particles for better continuous drawing
+        for _ in 0..6 {
             let angle = js_sys::Math::random() as f32 * 2.0 * std::f32::consts::PI;
-            let speed = (js_sys::Math::random() as f32) * 80.0 + 20.0; // More impressive speed
+            let speed = (js_sys::Math::random() as f32) * 15.0 + 5.0; // Slow speed for light painting
             
-            // Add some randomness to position for magical scattered effect
-            let offset_x = (js_sys::Math::random() as f32 - 0.5) * 25.0;
-            let offset_y = (js_sys::Math::random() as f32 - 0.5) * 25.0;
+            // Small spread for continuous light painting effect
+            let offset_x = (js_sys::Math::random() as f32 - 0.5) * 8.0;
+            let offset_y = (js_sys::Math::random() as f32 - 0.5) * 8.0;
             
             let new_particle = Particle {
                 x: x + offset_x,
@@ -578,20 +912,93 @@ impl App {
                 vx: angle.cos() * speed,
                 vy: angle.sin() * speed,
                 life: 1.0,
-                color_index: (js_sys::Math::random() as f32) * 4.0,
+                color_index: 8.0 + (js_sys::Math::random() as f32) * 2.0, // Yellowish light painting color range
+                is_magic_brush: true,
+                is_shooting_star: false,
+                is_trail_particle: false,
+                size_multiplier: 0.8 + (js_sys::Math::random() as f32) * 0.4,
+                fade_speed: 0.8 + (js_sys::Math::random() as f32) * 0.4, // Random fade speed for natural variation
             };
 
-            // Replace oldest particles or extend if under limit
-            if self.particles.len() < 800 { // Allow more particles for magic brush
+            // Natural, gradual replacement with randomness
+            if self.particles.len() < 1000 {
                 self.particles.push(new_particle);
             } else {
-                // Replace the first particle that has low life
-                if let Some(old_particle) = self.particles.iter_mut().find(|p| p.life < 0.3) {
-                    *old_particle = new_particle;
+                // Add randomness to make replacement more natural
+                let replace_threshold = 0.3 + (js_sys::Math::random() as f32) * 0.5; // Random between 0.3-0.8
+                
+                // Sometimes replace based on life, sometimes randomly for natural effect
+                let replacement_strategy = js_sys::Math::random() as f32;
+                
+                if replacement_strategy < 0.6 {
+                    // 60% chance: Replace based on life (natural aging)
+                    if let Some(old_particle) = self.particles.iter_mut().find(|p| p.is_magic_brush && p.life < replace_threshold) {
+                        *old_particle = new_particle;
+                    } else if let Some(old_particle) = self.particles.iter_mut().find(|p| p.life < 0.3) {
+                        *old_particle = new_particle;
+                    } else {
+                        // Find a random magic brush particle for more natural replacement
+                        let magic_brush_particles: Vec<usize> = self.particles.iter().enumerate()
+                            .filter(|(_, p)| p.is_magic_brush)
+                            .map(|(i, _)| i)
+                            .collect();
+                        
+                        if !magic_brush_particles.is_empty() {
+                            let random_index = (js_sys::Math::random() as f32 * magic_brush_particles.len() as f32) as usize;
+                            if let Some(&particle_index) = magic_brush_particles.get(random_index) {
+                                self.particles[particle_index] = new_particle;
+                            }
+                        }
+                    }
                 } else {
-                    // Replace first particle as fallback
-                    self.particles[0] = new_particle;
+                    // 40% chance: Semi-random replacement for natural variation
+                    let magic_brush_particles: Vec<usize> = self.particles.iter().enumerate()
+                        .filter(|(_, p)| p.is_magic_brush && p.life < 0.9) // Only consider somewhat faded particles
+                        .map(|(i, _)| i)
+                        .collect();
+                    
+                    if !magic_brush_particles.is_empty() {
+                        let random_index = (js_sys::Math::random() as f32 * magic_brush_particles.len() as f32) as usize;
+                        if let Some(&particle_index) = magic_brush_particles.get(random_index) {
+                            self.particles[particle_index] = new_particle;
+                        }
+                    }
                 }
+            }
+        }
+        
+        // Periodically restore star field to prevent permanent star loss
+        if self.frame_count % 300 == 0 { // Every 5 seconds at 60fps
+            self.restore_star_field();
+        }
+    }
+    
+    fn restore_star_field(&mut self) {
+        // Count current stars
+        let star_count = self.particles.iter().filter(|p| !p.is_magic_brush && !p.is_shooting_star && !p.is_trail_particle).count();
+        
+        // If we have too few stars, convert some expired magic brush particles back to stars
+        if star_count < 200 {
+            let mut converted = 0;
+            for particle in &mut self.particles {
+                if particle.is_magic_brush && particle.life < 0.05 && converted < 50 {
+                    // Convert back to a star
+                    particle.x = (js_sys::Math::random() as f32) * self.width;
+                    particle.y = (js_sys::Math::random() as f32) * self.height;
+                    particle.vx = 0.0;
+                    particle.vy = 0.0;
+                    particle.life = 0.8 + (js_sys::Math::random() as f32) * 0.2;
+                    particle.color_index = (js_sys::Math::random() as f32) * 4.0;
+                    particle.is_magic_brush = false;
+                    particle.is_shooting_star = false;
+                    particle.is_trail_particle = false;
+                    particle.size_multiplier = 0.3 + (js_sys::Math::random() as f32) * 0.7;
+                    particle.fade_speed = 0.1 + (js_sys::Math::random() as f32) * 0.2;
+                    converted += 1;
+                }
+            }
+            if converted > 0 {
+                console_log!("Restored {} stars to maintain star field", converted);
             }
         }
     }
