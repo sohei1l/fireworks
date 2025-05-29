@@ -281,26 +281,34 @@ impl App {
         let mut particles = Vec::new();
 
         // Create realistic star field with varied density
-        for _i in 0..300 {
+        for i in 0..300 {
             // Create clusters and sparse areas like real night sky
             let cluster_factor = (js_sys::Math::random() as f32).powf(1.8); // Less sparse, more stars
 
             if cluster_factor > 0.25 { // Lower threshold for more stars
-                // let is_shooting = i < 3; // Only 3 shooting stars for realism
-                let is_shooting = false; // Shooting stars disabled
+                let is_shooting = i < 3; // Only 3 shooting stars for realism
 
-                // Random positioning with some clustering
-                let x = (js_sys::Math::random() as f32) * width as f32;
-                let y = (js_sys::Math::random() as f32) * height as f32;
+                // For shooting stars, position them at different starting points
+                let (x, y) = if is_shooting {
+                    // Start shooting stars from left side at different heights to avoid overlap
+                    let start_x = -50.0; // Start off-screen left
+                    let start_y = 50.0 + (i as f32) * (height as f32 * 0.3); // Space them vertically
+                    (start_x, start_y)
+                } else {
+                    // Random positioning with some clustering for regular stars
+                    let x = (js_sys::Math::random() as f32) * width as f32;
+                    let y = (js_sys::Math::random() as f32) * height as f32;
+                    (x, y)
+                };
 
                 particles.push(Particle {
                     x,
                     y,
                     vx: if is_shooting {
-                        60.0 + (js_sys::Math::random() as f32) * 120.0 // Varied shooting star speeds
+                        120.0 + (js_sys::Math::random() as f32) * 40.0 // Consistent fast rightward speed
                     } else { 0.0 },
                     vy: if is_shooting {
-                        30.0 + (js_sys::Math::random() as f32) * 80.0 // Varied angles
+                        -20.0 + (js_sys::Math::random() as f32) * 10.0 // Slight downward angle variation
                     } else { 0.0 },
                     life: if is_shooting {
                         0.7 + (js_sys::Math::random() as f32) * 0.3 // Shooting stars start with varied life
@@ -585,6 +593,7 @@ impl App {
 
     fn update_particles(&mut self, _current_time: f64) {
         let dt = 0.016; // 60fps assumption
+        let mut new_trail_particles = Vec::new();
 
         for particle in &mut self.particles {
             if particle.is_trail_particle {
@@ -608,6 +617,35 @@ impl App {
 
                 // Light painting fade (20 seconds): 1.0 / (20 * 60) = 0.00083
                 particle.life -= 0.00083 * particle.fade_speed;
+            } else if particle.vx.abs() > 50.0 && particle.vy.abs() > 5.0 {
+                // Shooting star movement
+                particle.x += particle.vx * dt;
+                particle.y += particle.vy * dt;
+                
+                // Fade shooting stars as they move
+                particle.life -= 0.008 * particle.fade_speed;
+                
+                // Create trail particles for shooting star effect
+                if particle.life > 0.1 && (js_sys::Math::random() as f32) < 0.6 {
+                    let trail_particle = Particle {
+                        x: particle.x + (js_sys::Math::random() as f32 - 0.5) * 3.0,
+                        y: particle.y + (js_sys::Math::random() as f32 - 0.5) * 3.0,
+                        vx: particle.vx * 0.3 + (js_sys::Math::random() as f32 - 0.5) * 10.0,
+                        vy: particle.vy * 0.3 + (js_sys::Math::random() as f32 - 0.5) * 10.0,
+                        life: 0.8,
+                        color_index: 1.0, // Bright white for trail
+                        is_magic_brush: false,
+                        size_multiplier: 0.3 + (js_sys::Math::random() as f32) * 0.4,
+                        fade_speed: 2.0 + (js_sys::Math::random() as f32) * 2.0,
+                        is_trail_particle: true,
+                    };
+                    new_trail_particles.push(trail_particle);
+                }
+                
+                // Remove shooting stars when they go off screen
+                if particle.x > self.width + 100.0 || particle.y > self.height + 100.0 || particle.y < -100.0 {
+                    particle.life = 0.0; // Mark for removal
+                }
             } else {
                 // Regular stars - completely static, just twinkling
                 // No movement at all - real stars don't move noticeably
@@ -623,6 +661,9 @@ impl App {
 
             // Particles with life <= 0.0 will be removed by the retain filter below
         }
+
+        // Add new trail particles
+        self.particles.extend(new_trail_particles);
 
         // Remove particles that have completely faded out (life <= 0)
         self.particles.retain(|particle| particle.life > 0.0);
