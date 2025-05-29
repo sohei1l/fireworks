@@ -80,57 +80,126 @@
     </div>
     
     <script type="module">
-        import init, { App } from './pkg/neon_particles.js';
-
         async function run() {
-            await init();
-            
-            const app = new App();
-            const canvas = document.getElementById('canvas');
-            
-            // Add mouse click event listener
-            canvas.addEventListener('click', (event) => {
-                const rect = canvas.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
+            try {
+                console.log('Loading WASM module...');
+                const { default: init, App } = await import('./pkg/neon_particles.js');
+                console.log('WASM module loaded, initializing...');
                 
-                // Scale to canvas internal coordinates
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
+                await init();
+                console.log('WASM initialized, setting up canvas...');
                 
-                app.spawn_particles(x * scaleX, y * scaleY);
-            });
-            
-            // Add control event listeners
-            const gravityToggle = document.getElementById('gravity-toggle');
-            gravityToggle.addEventListener('change', (event) => {
-                app.set_gravity(event.target.checked);
-            });
-            
-            const bloomToggle = document.getElementById('bloom-toggle');
-            bloomToggle.addEventListener('change', (event) => {
-                app.set_bloom(event.target.checked);
-            });
-            
-            const trailsToggle = document.getElementById('trails-toggle');
-            trailsToggle.addEventListener('change', (event) => {
-                app.set_trails(event.target.checked);
-            });
-            
-            const frictionSlider = document.getElementById('friction-slider');
-            const frictionValue = document.getElementById('friction-value');
-            frictionSlider.addEventListener('input', (event) => {
-                const value = parseFloat(event.target.value);
-                app.set_friction(value);
-                frictionValue.textContent = value.toFixed(2);
-            });
-            
-            function frame(time) {
-                app.render(time);
+                const canvas = document.getElementById('canvas');
+                console.log('Canvas element:', canvas);
+                
+                // Set canvas size BEFORE creating the App
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                console.log('Canvas size set to:', canvas.width, 'x', canvas.height);
+                
+                console.log('Creating app...');
+                const app = new App();
+                console.log('App created successfully');
+                
+                // Add mouse click event listener
+                canvas.addEventListener('click', (event) => {
+                    try {
+                        const rect = canvas.getBoundingClientRect();
+                        const x = event.clientX - rect.left;
+                        const y = event.clientY - rect.top;
+                        
+                        // Scale to canvas internal coordinates
+                        const scaleX = canvas.width / rect.width;
+                        const scaleY = canvas.height / rect.height;
+                        
+                        console.log('Spawning particles at:', x * scaleX, y * scaleY);
+                        app.spawn_particles(x * scaleX, y * scaleY);
+                    } catch (e) {
+                        console.error('Error spawning particles:', e);
+                    }
+                });
+                
+                // Add control event listeners
+                const gravityToggle = document.getElementById('gravity-toggle');
+                gravityToggle.addEventListener('change', (event) => {
+                    try {
+                        app.set_gravity(event.target.checked);
+                        console.log('Gravity set to:', event.target.checked);
+                    } catch (e) {
+                        console.error('Error setting gravity:', e);
+                    }
+                });
+                
+                const bloomToggle = document.getElementById('bloom-toggle');
+                bloomToggle.addEventListener('change', (event) => {
+                    try {
+                        app.set_bloom(event.target.checked);
+                        console.log('Bloom set to:', event.target.checked);
+                    } catch (e) {
+                        console.error('Error setting bloom:', e);
+                    }
+                });
+                
+                const trailsToggle = document.getElementById('trails-toggle');
+                trailsToggle.addEventListener('change', (event) => {
+                    try {
+                        app.set_trails(event.target.checked);
+                        console.log('Trails set to:', event.target.checked);
+                    } catch (e) {
+                        console.error('Error setting trails:', e);
+                    }
+                });
+                
+                const frictionSlider = document.getElementById('friction-slider');
+                const frictionValue = document.getElementById('friction-value');
+                frictionSlider.addEventListener('input', (event) => {
+                    try {
+                        const value = parseFloat(event.target.value);
+                        app.set_friction(value);
+                        frictionValue.textContent = value.toFixed(2);
+                        console.log('Friction set to:', value);
+                    } catch (e) {
+                        console.error('Error setting friction:', e);
+                    }
+                });
+                
+                console.log('Starting render loop...');
+                let frameCount = 0;
+                let lastTime = 0;
+                const fpsElement = document.getElementById('fps');
+                
+                function frame(time) {
+                    try {
+                        app.render(time);
+                        
+                        // Update FPS display every 60 frames
+                        frameCount++;
+                        if (frameCount % 60 === 0) {
+                            if (lastTime > 0) {
+                                const fps = 60000 / (time - lastTime);
+                                fpsElement.textContent = `FPS: ${fps.toFixed(1)}`;
+                            }
+                            lastTime = time;
+                        }
+                        
+                        requestAnimationFrame(frame);
+                    } catch (e) {
+                        console.error('Error in render loop:', e);
+                        fpsElement.textContent = 'FPS: ERROR';
+                    }
+                }
+                
                 requestAnimationFrame(frame);
+                console.log('Application started successfully');
+                
+            } catch (error) {
+                console.error('Failed to initialize application:', error);
+                document.body.innerHTML += `<div style="color: red; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;">
+                    <h2>Error Loading Application</h2>
+                    <p>${error.message}</p>
+                    <p>Check browser console for more details.</p>
+                </div>`;
             }
-            
-            requestAnimationFrame(frame);
         }
         
         run();

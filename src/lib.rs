@@ -92,11 +92,15 @@ impl App {
             .ok_or("Failed to get WebGL context")?
             .dyn_into::<GL>()?;
 
-        // Set viewport to canvas size
-        let width = canvas.client_width() as i32;
-        let height = canvas.client_height() as i32;
-        canvas.set_width(width as u32);
-        canvas.set_height(height as u32);
+        // Get canvas size (should be set by JavaScript before creating App)
+        let width = canvas.width() as i32;
+        let height = canvas.height() as i32;
+        console_log!("Canvas dimensions: {}x{}", width, height);
+        
+        if width == 0 || height == 0 {
+            return Err(JsValue::from_str("Canvas has zero dimensions - ensure canvas size is set before creating App"));
+        }
+        
         gl.viewport(0, 0, width, height);
 
         // Create shaders
