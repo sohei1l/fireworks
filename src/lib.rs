@@ -65,6 +65,8 @@ pub struct App {
     trails_enabled: bool,
     // Northern lights
     northern_lights_program: WebGlProgram,
+    // Shooting star timing
+    last_shooting_star_time: f64,
 }
 
 #[wasm_bindgen]
@@ -496,11 +498,19 @@ impl App {
             blur_program,
             trails_enabled: true,
             northern_lights_program,
+            last_shooting_star_time: 0.0,
         })
     }
 
     pub fn render(&mut self, current_time: f64) {
         self.frame_count += 1;
+        
+        // Check if we should spawn a new shooting star (every 5-10 seconds)
+        let shooting_star_interval = 5000.0 + (js_sys::Math::random() as f64) * 5000.0; // 5-10 seconds in milliseconds
+        if current_time - self.last_shooting_star_time > shooting_star_interval {
+            self.spawn_new_shooting_star();
+            self.last_shooting_star_time = current_time;
+        }
 
         if self.bloom_enabled {
             // Render to framebuffer first
@@ -617,13 +627,13 @@ impl App {
 
                 // Light painting fade (20 seconds): 1.0 / (20 * 60) = 0.00083
                 particle.life -= 0.00083 * particle.fade_speed;
-            } else if particle.vx.abs() > 50.0 && particle.vy.abs() > 5.0 {
-                // Shooting star movement
+            } else if particle.vx.abs() > 50.0 || particle.vy.abs() > 50.0 {
+                // Shooting star movement (updated condition to catch all directions)
                 particle.x += particle.vx * dt;
                 particle.y += particle.vy * dt;
                 
-                // Fade shooting stars as they move
-                particle.life -= 0.008 * particle.fade_speed;
+                // Fade shooting stars over 2 seconds max (1.0 life / 2 seconds / 60 fps = 0.0083 per frame)
+                particle.life -= 0.0083 * particle.fade_speed;
                 
                 // Create trail particles for shooting star effect
                 if particle.life > 0.1 && (js_sys::Math::random() as f32) < 0.6 {
@@ -642,8 +652,9 @@ impl App {
                     new_trail_particles.push(trail_particle);
                 }
                 
-                // Remove shooting stars when they go off screen
-                if particle.x > self.width + 100.0 || particle.y > self.height + 100.0 || particle.y < -100.0 {
+                // Remove shooting stars when they go off screen (any direction)
+                if particle.x > self.width + 100.0 || particle.x < -100.0 || 
+                   particle.y > self.height + 100.0 || particle.y < -100.0 {
                     particle.life = 0.0; // Mark for removal
                 }
             } else {
@@ -815,6 +826,58 @@ impl App {
     #[wasm_bindgen]
     pub fn set_trails(&mut self, enabled: bool) {
         self.trails_enabled = enabled;
+    }
+
+    fn spawn_new_shooting_star(&mut self) {
+        // Choose random starting edge (0=top, 1=right, 2=bottom, 3=left)
+        let edge = (js_sys::Math::random() as f32 * 4.0) as i32;
+        let margin = 100.0; // Distance outside screen to start
+        
+        let (start_x, start_y, angle_range) = match edge {
+            0 => {
+                // Top edge - shoot downward and across
+                let x = (js_sys::Math::random() as f32) * self.width;
+                let y = -margin;
+                (x, y, (std::f32::consts::PI * 0.25, std::f32::consts::PI * 0.75)) // 45° to 135°
+            },
+            1 => {
+                // Right edge - shoot leftward and across
+                let x = self.width + margin;
+                let y = (js_sys::Math::random() as f32) * self.height;
+                (x, y, (std::f32::consts::PI * 0.75, std::f32::consts::PI * 1.25)) // 135° to 225°
+            },
+            2 => {
+                // Bottom edge - shoot upward and across
+                let x = (js_sys::Math::random() as f32) * self.width;
+                let y = self.height + margin;
+                (x, y, (std::f32::consts::PI * 1.25, std::f32::consts::PI * 1.75)) // 225° to 315°
+            },
+            _ => {
+                // Left edge - shoot rightward and across (default)
+                let x = -margin;
+                let y = (js_sys::Math::random() as f32) * self.height;
+                (x, y, (-std::f32::consts::PI * 0.25, std::f32::consts::PI * 0.25)) // -45° to 45°
+            }
+        };
+        
+        // Random angle within the appropriate range for this edge
+        let angle = angle_range.0 + (js_sys::Math::random() as f32) * (angle_range.1 - angle_range.0);
+        let speed = 150.0 + (js_sys::Math::random() as f32) * 100.0; // 150-250 speed
+        
+        let new_shooting_star = Particle {
+            x: start_x,
+            y: start_y,
+            vx: angle.cos() * speed,
+            vy: angle.sin() * speed,
+            life: 1.0, // Start at full life, will fade over 2 seconds max
+            color_index: (js_sys::Math::random() as f32) * 4.0,
+            is_magic_brush: false,
+            size_multiplier: 1.2 + (js_sys::Math::random() as f32) * 1.5,
+            fade_speed: 0.5 + (js_sys::Math::random() as f32) * 0.5, // 0.5-1.0 fade speed for 2 second max lifetime
+            is_trail_particle: false,
+        };
+        
+        self.particles.push(new_shooting_star);
     }
 
     #[wasm_bindgen]
