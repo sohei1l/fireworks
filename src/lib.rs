@@ -14,20 +14,10 @@ struct Particle {
     fade_speed: f32,
     is_shooting_star: bool,
     is_trail_particle: bool,
+    creation_time: f64,
 }
 
 
-// Import the `console.log` function from the browser
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-}
-
-// Define a macro to provide `println!`-style syntax for console logs
-macro_rules! console_log {
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
 
 fn compile_shader(gl: &GL, shader_type: u32, source: &str) -> Result<WebGlShader, String> {
     let shader = gl.create_shader(shader_type).ok_or("Failed to create shader")?;
@@ -57,7 +47,6 @@ fn link_program(gl: &GL, vert_shader: &WebGlShader, frag_shader: &WebGlShader) -
 #[wasm_bindgen]
 pub struct App {
     gl: GL,
-    last_frame_time: f64,
     frame_count: u32,
     program: WebGlProgram,
     vertex_buffer: WebGlBuffer,
@@ -84,7 +73,6 @@ pub struct App {
 impl App {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Result<App, JsValue> {
-        console_log!("Initializing Neon Particles...");
 
         let window = window().ok_or("Failed to get window")?;
         let document = window.document().ok_or("Failed to get document")?;
@@ -102,7 +90,6 @@ impl App {
         // Get canvas size (should be set by JavaScript before creating App)
         let width = canvas.width() as i32;
         let height = canvas.height() as i32;
-        console_log!("Canvas dimensions: {}x{}", width, height);
         
         if width == 0 || height == 0 {
             return Err(JsValue::from_str("Canvas has zero dimensions - ensure canvas size is set before creating App"));
@@ -176,12 +163,12 @@ impl App {
                 vec2 clipspace = (position / resolution) * 2.0 - 1.0;
                 gl_Position = vec4(clipspace * vec2(1, -1), 0.0, 1.0);
                 
-                // Base size with variation
+                // Base size with variation (reduced by 25%)
                 float baseSize;
                 if (isMagicBrush > 0.5) {
-                    baseSize = 18.0 + life * 12.0; // Bigger magic brush particles
+                    baseSize = 13.5 + life * 9.0; // Bigger magic brush particles
                 } else {
-                    baseSize = 8.0 + life * 4.0; // Smaller regular particles
+                    baseSize = 6.0 + life * 3.0; // Smaller regular particles
                 }
                 
                 gl_PointSize = baseSize * sizeMultiplier;
@@ -335,6 +322,7 @@ impl App {
                     },
                     is_shooting_star: is_shooting,
                     is_trail_particle: false,
+                    creation_time: 0.0, // Initial particles created at time 0
                 });
             }
         }
@@ -483,11 +471,9 @@ impl App {
         gl.enable(GL::BLEND);
         gl.blend_func(GL::SRC_ALPHA, GL::ONE);
 
-        console_log!("WebGL setup complete with {} particles, northern lights, and starry night theme", particles.len());
 
         Ok(App {
             gl,
-            last_frame_time: 0.0,
             frame_count: 0,
             program,
             vertex_buffer,
@@ -509,14 +495,6 @@ impl App {
     }
 
     pub fn render(&mut self, current_time: f64) {
-        // Calculate FPS every 60 frames
-        if self.frame_count % 60 == 0 {
-            if self.last_frame_time > 0.0 {
-                let fps = 60000.0 / (current_time - self.last_frame_time);
-                console_log!("FPS: {:.1}", fps);
-            }
-            self.last_frame_time = current_time;
-        }
         self.frame_count += 1;
 
         if self.bloom_enabled {
@@ -608,7 +586,7 @@ impl App {
         }
     }
 
-    fn update_particles(&mut self, _current_time: f64) {
+    fn update_particles(&mut self, current_time: f64) {
         let dt = 0.016; // 60fps assumption
 
         // First pass - collect shooting star positions for trail spawning
@@ -646,6 +624,7 @@ impl App {
                         particle.vx = 40.0 + (js_sys::Math::random() as f32) * 100.0;
                         particle.vy = 20.0 + (js_sys::Math::random() as f32) * 60.0;
                         particle.life = 0.8 + (js_sys::Math::random() as f32) * 0.2;
+                        particle.creation_time = current_time;
                     } else {
                         // Keep it off screen until random respawn
                         particle.x = -1000.0;
@@ -674,8 +653,8 @@ impl App {
                 particle.x += particle.vx * dt;
                 particle.y += particle.vy * dt;
                 
-                // Light painting fade (15 seconds): 1.0 / (15 * 60) = 0.0011
-                particle.life -= 0.0011 * particle.fade_speed;
+                // Light painting fade (20 seconds): 1.0 / (20 * 60) = 0.00083
+                particle.life -= 0.00083 * particle.fade_speed;
             } else {
                 // Regular stars - completely static, just twinkling
                 // No movement at all - real stars don't move noticeably
@@ -689,21 +668,11 @@ impl App {
                 }
             }
             
-            if particle.life <= 0.0 && !particle.is_shooting_star {
-                // Respawn as regular star (not shooting star)
-                particle.x = (js_sys::Math::random() as f32) * self.width;
-                particle.y = (js_sys::Math::random() as f32) * self.height;
-                particle.vx = 0.0;
-                particle.vy = 0.0;
-                particle.life = 1.0;
-                particle.color_index = (js_sys::Math::random() as f32) * 4.0;
-                particle.is_magic_brush = false;
-                particle.is_shooting_star = false;
-                particle.size_multiplier = 0.3 + (js_sys::Math::random() as f32) * 0.7;
-                particle.fade_speed = 0.1 + (js_sys::Math::random() as f32) * 0.2;
-                particle.is_trail_particle = false;
-            }
+            // Particles with life <= 0.0 will be removed by the retain filter below
         }
+
+        // Remove particles that have completely faded out (life <= 0)
+        self.particles.retain(|particle| particle.life > 0.0);
 
         // Spawn trail particles for shooting stars
         for (star_x, star_y, star_vx, star_vy) in shooting_star_positions {
@@ -713,22 +682,22 @@ impl App {
                 let trail_x = star_x - (star_vx / star_vx.abs().max(1.0)) * trail_offset;
                 let trail_y = star_y - (star_vy / star_vy.abs().max(1.0)) * trail_offset;
                 
-                // Find an expired particle to replace with trail
-                if let Some(expired_particle) = self.particles.iter_mut().find(|p| p.life <= 0.0 && !p.is_shooting_star) {
-                    *expired_particle = Particle {
-                        x: trail_x,
-                        y: trail_y,
-                        vx: star_vx * 0.1, // Much slower than the main star
-                        vy: star_vy * 0.1,
-                        life: 1.0 - (i as f32 * 0.2), // Progressively dimmer but not too much
-                        color_index: 0.5 + (i as f32 * 0.2), // Ensure trail particles stay in trail range
-                        is_magic_brush: false,
-                        is_shooting_star: false,
-                        is_trail_particle: true,
-                        size_multiplier: 0.5 - (i as f32 * 0.1), // Smaller than main star
-                        fade_speed: 1.0,
-                    };
-                }
+                // Create trail particle
+                let trail_particle = Particle {
+                    x: trail_x,
+                    y: trail_y,
+                    vx: star_vx * 0.1, // Much slower than the main star
+                    vy: star_vy * 0.1,
+                    life: 1.0 - (i as f32 * 0.2), // Progressively dimmer but not too much
+                    color_index: 0.5 + (i as f32 * 0.2), // Ensure trail particles stay in trail range
+                    is_magic_brush: false,
+                    is_shooting_star: false,
+                    is_trail_particle: true,
+                    size_multiplier: 0.5 - (i as f32 * 0.1), // Smaller than main star
+                    fade_speed: 1.0,
+                    creation_time: current_time,
+                };
+                self.particles.push(trail_particle);
             }
         }
     }
@@ -836,8 +805,7 @@ impl App {
     }
 
     #[wasm_bindgen]
-    pub fn spawn_particles(&mut self, x: f32, y: f32) {
-        console_log!("Spawning particles at ({}, {})", x, y);
+    pub fn spawn_particles(&mut self, x: f32, y: f32, current_time: f64) {
         
         // Spawn a burst of 10 particles at the mouse position
         for _ in 0..10 {
@@ -855,48 +823,37 @@ impl App {
                 is_shooting_star: false,
                 is_trail_particle: false,
                 size_multiplier: 0.5 + (js_sys::Math::random() as f32) * 1.5,
-                fade_speed: 0.5 + (js_sys::Math::random() as f32) * 1.0,
+                fade_speed: 0.8 + (js_sys::Math::random() as f32) * 1.0, // Random fade speed (0.8-1.8x)
+                creation_time: current_time,
             };
 
-            // Only add regular particles if we have plenty of space (preserve magic brush priority)
-            if self.particles.len() < 800 {
-                self.particles.push(new_particle);
-            } else {
-                // Only replace background stars, never magic brush or shooting stars
-                if let Some(old_particle) = self.particles.iter_mut().find(|p| !p.is_magic_brush && !p.is_shooting_star && p.life < 0.5) {
-                    *old_particle = new_particle;
-                }
-                // If no suitable replacement found, just don't add this particle
-            }
+            // Always add new particles - let them fade naturally based on age
+            self.particles.push(new_particle);
         }
     }
 
     #[wasm_bindgen]
     pub fn set_gravity(&mut self, enabled: bool) {
         self.gravity_enabled = enabled;
-        console_log!("Gravity {}", if enabled { "enabled" } else { "disabled" });
     }
 
     #[wasm_bindgen]
     pub fn set_friction(&mut self, friction: f32) {
         self.friction = friction.max(0.9).min(1.0); // Clamp between 0.9 and 1.0
-        console_log!("Friction set to {}", self.friction);
     }
 
     #[wasm_bindgen]
     pub fn set_bloom(&mut self, enabled: bool) {
         self.bloom_enabled = enabled;
-        console_log!("Bloom {}", if enabled { "enabled" } else { "disabled" });
     }
 
     #[wasm_bindgen]
     pub fn set_trails(&mut self, enabled: bool) {
         self.trails_enabled = enabled;
-        console_log!("Trails {}", if enabled { "enabled" } else { "disabled" });
     }
 
     #[wasm_bindgen]
-    pub fn spawn_magic_brush_particles(&mut self, x: f32, y: f32) {
+    pub fn spawn_magic_brush_particles(&mut self, x: f32, y: f32, current_time: f64) {
         // Spawn more particles for better continuous drawing
         for _ in 0..6 {
             let angle = js_sys::Math::random() as f32 * 2.0 * std::f32::consts::PI;
@@ -917,94 +874,16 @@ impl App {
                 is_shooting_star: false,
                 is_trail_particle: false,
                 size_multiplier: 0.8 + (js_sys::Math::random() as f32) * 0.4,
-                fade_speed: 0.8 + (js_sys::Math::random() as f32) * 0.4, // Random fade speed for natural variation
+                fade_speed: 0.5 + (js_sys::Math::random() as f32) * 1.0, // Random fade speed for natural variation (0.5-1.5x)
+                creation_time: current_time,
             };
 
-            // Natural, gradual replacement with randomness
-            if self.particles.len() < 1000 {
-                self.particles.push(new_particle);
-            } else {
-                // Add randomness to make replacement more natural
-                let replace_threshold = 0.3 + (js_sys::Math::random() as f32) * 0.5; // Random between 0.3-0.8
-                
-                // Sometimes replace based on life, sometimes randomly for natural effect
-                let replacement_strategy = js_sys::Math::random() as f32;
-                
-                if replacement_strategy < 0.6 {
-                    // 60% chance: Replace based on life (natural aging)
-                    if let Some(old_particle) = self.particles.iter_mut().find(|p| p.is_magic_brush && p.life < replace_threshold) {
-                        *old_particle = new_particle;
-                    } else if let Some(old_particle) = self.particles.iter_mut().find(|p| p.life < 0.3) {
-                        *old_particle = new_particle;
-                    } else {
-                        // Find a random magic brush particle for more natural replacement
-                        let magic_brush_particles: Vec<usize> = self.particles.iter().enumerate()
-                            .filter(|(_, p)| p.is_magic_brush)
-                            .map(|(i, _)| i)
-                            .collect();
-                        
-                        if !magic_brush_particles.is_empty() {
-                            let random_index = (js_sys::Math::random() as f32 * magic_brush_particles.len() as f32) as usize;
-                            if let Some(&particle_index) = magic_brush_particles.get(random_index) {
-                                self.particles[particle_index] = new_particle;
-                            }
-                        }
-                    }
-                } else {
-                    // 40% chance: Semi-random replacement for natural variation
-                    let magic_brush_particles: Vec<usize> = self.particles.iter().enumerate()
-                        .filter(|(_, p)| p.is_magic_brush && p.life < 0.9) // Only consider somewhat faded particles
-                        .map(|(i, _)| i)
-                        .collect();
-                    
-                    if !magic_brush_particles.is_empty() {
-                        let random_index = (js_sys::Math::random() as f32 * magic_brush_particles.len() as f32) as usize;
-                        if let Some(&particle_index) = magic_brush_particles.get(random_index) {
-                            self.particles[particle_index] = new_particle;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Periodically restore star field to prevent permanent star loss
-        if self.frame_count % 300 == 0 { // Every 5 seconds at 60fps
-            self.restore_star_field();
-        }
-    }
-    
-    fn restore_star_field(&mut self) {
-        // Count current stars
-        let star_count = self.particles.iter().filter(|p| !p.is_magic_brush && !p.is_shooting_star && !p.is_trail_particle).count();
-        
-        // If we have too few stars, convert some expired magic brush particles back to stars
-        if star_count < 200 {
-            let mut converted = 0;
-            for particle in &mut self.particles {
-                if particle.is_magic_brush && particle.life < 0.05 && converted < 50 {
-                    // Convert back to a star
-                    particle.x = (js_sys::Math::random() as f32) * self.width;
-                    particle.y = (js_sys::Math::random() as f32) * self.height;
-                    particle.vx = 0.0;
-                    particle.vy = 0.0;
-                    particle.life = 0.8 + (js_sys::Math::random() as f32) * 0.2;
-                    particle.color_index = (js_sys::Math::random() as f32) * 4.0;
-                    particle.is_magic_brush = false;
-                    particle.is_shooting_star = false;
-                    particle.is_trail_particle = false;
-                    particle.size_multiplier = 0.3 + (js_sys::Math::random() as f32) * 0.7;
-                    particle.fade_speed = 0.1 + (js_sys::Math::random() as f32) * 0.2;
-                    converted += 1;
-                }
-            }
-            if converted > 0 {
-                console_log!("Restored {} stars to maintain star field", converted);
-            }
+            // Always add new particles - let them fade naturally based on age
+            self.particles.push(new_particle);
         }
     }
 }
 
 #[wasm_bindgen(start)]
 pub fn start() {
-    console_log!("WASM module loaded");
 }

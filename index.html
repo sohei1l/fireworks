@@ -123,7 +123,7 @@
               const scaleY = canvas.height / rect.height;
 
               console.log("Spawning particles at:", x * scaleX, y * scaleY);
-              app.spawn_particles(x * scaleX, y * scaleY);
+              app.spawn_particles(x * scaleX, y * scaleY, performance.now());
             } catch (e) {
               console.error("Error spawning particles:", e);
             }
@@ -142,7 +142,7 @@
               const scaleX = canvas.width / rect.width;
               const scaleY = canvas.height / rect.height;
 
-              app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
+              app.spawn_magic_brush_particles(x * scaleX, y * scaleY, performance.now());
             } catch (e) {
               console.error("Error with magic brush:", e);
             }
@@ -163,7 +163,7 @@
               const scaleX = canvas.width / rect.width;
               const scaleY = canvas.height / rect.height;
 
-              app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
+              app.spawn_magic_brush_particles(x * scaleX, y * scaleY, performance.now());
             } catch (e) {
               console.error("Error with touch start:", e);
             }
@@ -183,7 +183,7 @@
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
 
-                app.spawn_magic_brush_particles(x * scaleX, y * scaleY);
+                app.spawn_magic_brush_particles(x * scaleX, y * scaleY, performance.now());
               }
             } catch (e) {
               console.error("Error with touch move:", e);
