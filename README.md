@@ -4,9 +4,7 @@ A browser playground where you fling glowing particles that bounce, fade, and ch
 
 ## 🎮 Live Demo
 
-[![Demo](https://img.shields.io/badge/Live%20Demo-Neon%20Particles-blue?style=for-the-badge)](https://sohei1l.github.io/magic-brush)
-
-https://sohei1l.github.io/magic-brush
+[![Demo](https://img.shields.io/badge/Live%20Demo-Magic%20Brush-blue?style=for-the-badge)](https://sohei1l.github.io/magic-brush/)
 
 ## Quick Start
 
