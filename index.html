@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Magic Brush</title>
+    <title>Fireworks</title>
     <style>
       body {
         margin: 0;
@@ -70,13 +70,35 @@
         text-align: center;
       }
 
+      #instructions {
+        position: absolute;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: white;
+        font-size: 18px;
+        font-weight: 300;
+        text-align: center;
+        z-index: 100;
+        pointer-events: none;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+      }
+
     </style>
   </head>
   <body>
     <canvas id="canvas"></canvas>
 
+    <!-- Audio elements for firework sounds -->
+    <audio id="launchSound" preload="auto">
+      <!-- We'll generate these sounds programmatically -->
+    </audio>
+    <audio id="explosionSound" preload="auto">
+      <!-- We'll generate these sounds programmatically -->
+    </audio>
+
     <div id="header">
-      <h1 id="project-title">Magic Brush</h1>
+      <h1 id="project-title">Fireworks</h1>
       <a
         href="https://github.com/sohei1l/magic-brush"
         target="_blank"
@@ -86,13 +108,152 @@
       </a>
     </div>
 
+    <div id="instructions">
+      Click anywhere on the screen to launch fireworks
+    </div>
+
 
     <script type="module">
+      // Audio context and sound generation
+      let audioContext;
+      let launchSounds = [];
+      let explosionSounds = [];
+
+      // Initialize audio context (needs user interaction first)
+      function initAudio() {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          generateFireworkSounds();
+        }
+      }
+
+      // Generate realistic firework sounds
+      function generateFireworkSounds() {
+        // Generate 5 different launch sounds
+        for (let i = 0; i < 5; i++) {
+          launchSounds.push(generateLaunchSound());
+        }
+        
+        // Generate 5 different explosion sounds
+        for (let i = 0; i < 5; i++) {
+          explosionSounds.push(generateExplosionSound());
+        }
+      }
+
+      // Generate launch sound (whoosh only)
+      function generateLaunchSound() {
+        const duration = 1.0; // 1.0 seconds
+        const sampleRate = audioContext.sampleRate;
+        const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < data.length; i++) {
+          const t = i / sampleRate;
+          
+          // Pure whoosh noise (filtered white noise)
+          const noise = (Math.random() * 2 - 1);
+          
+          // Low-pass filter effect (reduce high frequencies)
+          const filterFreq = 800 - (t * 300); // Start at 800Hz, drop to 500Hz
+          const filtered = noise * Math.sin(2 * Math.PI * filterFreq * t * 0.1);
+          
+          // Wind-like whoosh with multiple layers
+          const whoosh1 = filtered * 0.4;
+          const whoosh2 = (Math.random() * 2 - 1) * 0.3 * Math.sin(t * 10);
+          
+          // Combine whoosh layers
+          const totalWhoosh = whoosh1 + whoosh2;
+          
+          // Apply envelope (fade out over time) and make quieter
+          const envelope = Math.exp(-t * 2); // Fade out
+          data[i] = totalWhoosh * envelope * 0.15; // Much quieter (was 0.5 total)
+        }
+
+        return buffer;
+      }
+
+      // Generate explosion sound (boom with crackles)
+      function generateExplosionSound() {
+        const duration = 2.0; // 2.0 seconds
+        const sampleRate = audioContext.sampleRate;
+        const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < data.length; i++) {
+          const t = i / sampleRate;
+          
+          // Initial boom (low frequency burst) - bigger and louder
+          const boomFreq = 50 + Math.sin(t * 15) * 15; // 35-65Hz with modulation
+          const boom = Math.sin(2 * Math.PI * boomFreq * t) * Math.exp(-t * 6) * 1.2; // Louder boom
+          
+          // Secondary boom wave for depth
+          const secondBoom = Math.sin(2 * Math.PI * (boomFreq * 1.5) * t) * Math.exp(-t * 8) * 0.6;
+          
+          // Crackling sounds (random pops) - more frequent
+          let crackle = 0;
+          if (t > 0.05 && Math.random() < 0.08) { // More frequent crackles
+            crackle = (Math.random() * 2 - 1) * Math.exp(-(t - 0.05) * 2.5) * 0.5;
+          }
+          
+          // High frequency sparkles - less harsh
+          let sparkle = 0;
+          if (t > 0.1 && Math.random() < 0.06) {
+            const sparkleFreq = 1500 + Math.random() * 800; // Lower frequency range
+            sparkle = Math.sin(2 * Math.PI * sparkleFreq * t) * 
+                     Math.exp(-t * 5) * 0.15;
+          }
+          
+          // Combine all elements with higher overall volume
+          data[i] = (boom + secondBoom + crackle + sparkle) * 1.3; // 30% louder overall
+        }
+
+        return buffer;
+      }
+
+      // Play launch sound
+      function playLaunchSound() {
+        if (!audioContext || launchSounds.length === 0) return;
+        
+        const source = audioContext.createBufferSource();
+        source.buffer = launchSounds[Math.floor(Math.random() * launchSounds.length)];
+        
+        // Add some pitch variation (less variation for more consistent whoosh)
+        source.playbackRate.value = 0.95 + Math.random() * 0.1;
+        
+        // Add gain control for quieter launch
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = 0.4 + Math.random() * 0.2; // Quieter launch sound
+        
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        source.start();
+      }
+
+      // Play explosion sound with delay
+      function playExplosionSound(delay = 0) {
+        if (!audioContext || explosionSounds.length === 0) return;
+        
+        setTimeout(() => {
+          const source = audioContext.createBufferSource();
+          source.buffer = explosionSounds[Math.floor(Math.random() * explosionSounds.length)];
+          
+          // Add some pitch variation
+          source.playbackRate.value = 0.85 + Math.random() * 0.3;
+          
+          const gainNode = audioContext.createGain();
+          gainNode.gain.value = 0.8 + Math.random() * 0.2; // Louder explosion
+          
+          source.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          source.start();
+        }, delay);
+      }
+
       async function run() {
         try {
           console.log("Loading WASM module...");
           const { default: init, App } = await import(
-            "./pkg/neon_particles.js"
+            "./pkg/fireworks.js"
           );
           console.log("WASM module loaded, initializing...");
 
@@ -111,9 +272,12 @@
           const app = new App();
           console.log("App created successfully");
 
-          // Add mouse click event listener
+          // Add mouse click event listener for fireworks
           canvas.addEventListener("click", (event) => {
             try {
+              // Initialize audio on first interaction
+              initAudio();
+              
               const rect = canvas.getBoundingClientRect();
               const x = event.clientX - rect.left;
               const y = event.clientY - rect.top;
@@ -122,29 +286,27 @@
               const scaleX = canvas.width / rect.width;
               const scaleY = canvas.height / rect.height;
 
-              console.log("Spawning particles at:", x * scaleX, y * scaleY);
-              app.spawn_particles(x * scaleX, y * scaleY, performance.now());
+              const clickY = y * scaleY;
+              
+              // Calculate explosion timing based on rocket travel time
+              const clickRatio = clickY / canvas.height;
+              const targetHeightRatio = 0.2 + (1.0 - clickRatio) * 0.6;
+              const targetY = canvas.height * targetHeightRatio;
+              const distance = clickY - targetY;
+              const rocketSpeed = 300 + (1.0 - clickRatio) * 200;
+              const explosionDelay = (distance / rocketSpeed) * 1000; // Convert to milliseconds
+
+              console.log("Spawning firework at:", x * scaleX, clickY, "explosion in:", explosionDelay + "ms");
+              
+              // Play launch sound immediately
+              playLaunchSound();
+              
+              // Schedule explosion sound
+              playExplosionSound(explosionDelay);
+              
+              app.spawn_firework(x * scaleX, clickY, performance.now());
             } catch (e) {
-              console.error("Error spawning particles:", e);
-            }
-          });
-
-          // Magic brush is always enabled
-          let isTouching = false; // Track if user is touching for mobile
-
-          canvas.addEventListener("mousemove", (event) => {
-            try {
-              const rect = canvas.getBoundingClientRect();
-              const x = event.clientX - rect.left;
-              const y = event.clientY - rect.top;
-
-              // Scale to canvas internal coordinates
-              const scaleX = canvas.width / rect.width;
-              const scaleY = canvas.height / rect.height;
-
-              app.spawn_magic_brush_particles(x * scaleX, y * scaleY, performance.now());
-            } catch (e) {
-              console.error("Error with magic brush:", e);
+              console.error("Error spawning firework:", e);
             }
           });
 
@@ -152,7 +314,9 @@
           canvas.addEventListener("touchstart", (event) => {
             try {
               event.preventDefault(); // Prevent scrolling
-              isTouching = true;
+              
+              // Initialize audio on first interaction
+              initAudio();
 
               const rect = canvas.getBoundingClientRect();
               const touch = event.touches[0];
@@ -163,58 +327,37 @@
               const scaleX = canvas.width / rect.width;
               const scaleY = canvas.height / rect.height;
 
-              app.spawn_magic_brush_particles(x * scaleX, y * scaleY, performance.now());
+              const clickY = y * scaleY;
+              
+              // Calculate explosion timing based on rocket travel time
+              const clickRatio = clickY / canvas.height;
+              const targetHeightRatio = 0.2 + (1.0 - clickRatio) * 0.6;
+              const targetY = canvas.height * targetHeightRatio;
+              const distance = clickY - targetY;
+              const rocketSpeed = 300 + (1.0 - clickRatio) * 200;
+              const explosionDelay = (distance / rocketSpeed) * 1000; // Convert to milliseconds
+
+              console.log("Spawning firework at:", x * scaleX, clickY, "explosion in:", explosionDelay + "ms");
+              
+              // Play launch sound immediately
+              playLaunchSound();
+              
+              // Schedule explosion sound
+              playExplosionSound(explosionDelay);
+              
+              app.spawn_firework(x * scaleX, clickY, performance.now());
             } catch (e) {
               console.error("Error with touch start:", e);
             }
           });
 
-          canvas.addEventListener("touchmove", (event) => {
-            try {
-              event.preventDefault(); // Prevent scrolling
-
-              if (isTouching) {
-                const rect = canvas.getBoundingClientRect();
-                const touch = event.touches[0];
-                const x = touch.clientX - rect.left;
-                const y = touch.clientY - rect.top;
-
-                // Scale to canvas internal coordinates
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-
-                app.spawn_magic_brush_particles(x * scaleX, y * scaleY, performance.now());
-              }
-            } catch (e) {
-              console.error("Error with touch move:", e);
-            }
-          });
-
-          canvas.addEventListener("touchend", (event) => {
-            try {
-              event.preventDefault();
-              isTouching = false;
-            } catch (e) {
-              console.error("Error with touch end:", e);
-            }
-          });
-
-          canvas.addEventListener("touchcancel", (event) => {
-            try {
-              event.preventDefault();
-              isTouching = false;
-            } catch (e) {
-              console.error("Error with touch cancel:", e);
-            }
-          });
-
-          // Set app defaults - all features optimized for magic brush writing
-          app.set_gravity(false);
+          // Set app defaults - optimized for fireworks
+          app.set_gravity(true);
           app.set_bloom(true);
           app.set_trails(true);
           app.set_friction(0.95);
           
-          // Set cursor for magic brush
+          // Set cursor for fireworks
           canvas.style.cursor = "crosshair";
 
           console.log("Starting render loop...");

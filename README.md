@@ -1,10 +1,10 @@
-# Magic Brush
+# Fireworks
 
-A browser playground where you fling glowing particles that bounce, fade, and chain-react. Built with Rust + WebGL to explore WASM in the browser.
+A realistic fireworks simulator in the browser where you click to launch rockets that explode into spectacular displays. Built with Rust + WebGL + WebAudio to explore WASM in the browser.
 
 ## 🎮 Live Demo
 
-[![Demo](https://img.shields.io/badge/Live%20Demo-Magic%20Brush-blue?style=for-the-badge)](https://sohei1l.github.io/magic-brush/)
+[![Demo](https://img.shields.io/badge/Live%20Demo-Fireworks-blue?style=for-the-badge)](https://sohei1l.github.io/fireworks/)
 
 ## Quick Start
 
@@ -23,8 +23,8 @@ curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 ```bash
 # Clone the repository
-git clone https://github.com/sohei1l/neon-particles.git
-cd neon-particles
+git clone https://github.com/sohei1l/fireworks.git
+cd fireworks
 
 # Build the WASM module
 ./build.sh
@@ -41,8 +41,7 @@ open http://localhost:8000
 
 ### Controls
 
-- **Click**: Spawn particle bursts
-- **Gravity**: Toggle gravitational physics
-- **Bloom Effect**: Toggle glow post-processing
-- **Particle Trails**: Toggle fading particle trails
-- **Friction**: Adjust particle energy decay
+- **Click/Touch**: Launch firework rockets that explode into colorful displays
+- **Position matters**: Click lower on screen = higher, bigger fireworks
+- **Audio**: Realistic whoosh and explosion sounds
+- **Physics**: Gravity affects explosion particles as they fall

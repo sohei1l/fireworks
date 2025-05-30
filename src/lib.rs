@@ -13,6 +13,9 @@ struct Particle {
     size_multiplier: f32,
     fade_speed: f32,
     is_trail_particle: bool,
+    is_firework_rocket: bool,
+    is_firework_particle: bool,
+    firework_target_y: f32,
 }
 
 
@@ -234,13 +237,42 @@ impl App {
 
                     gl_FragColor = vec4(color * 1.5, totalIntensity); // Brighter for light painting effect
                 } else {
-                    // Background particles are stars that twinkle, or trail particles
+                    // Background particles are stars that twinkle, trail particles, or firework particles
                     float time = u_time * 0.001;
 
-                    // Only check for trail particles if they have the right characteristics
+                    // Check for firework particles (color index 12-16)
+                    bool isFirework = v_colorIndex >= 12.0 && v_colorIndex < 17.0;
+                    // Check for trail particles if they have the right characteristics
                     bool isTrail = v_colorIndex < 1.5 && v_life < 0.8 && v_life > 0.1; // More specific trail detection
 
-                    if (isTrail) {
+                    if (isFirework) {
+                        // Firework particles - vibrant colors like real fireworks
+                        vec3 fireworkColor;
+                        float colorSelector = mod(v_colorIndex - 12.0, 4.0);
+                        
+                        if (colorSelector < 1.0) {
+                            fireworkColor = vec3(1.0, 0.1, 0.1); // Deep red
+                        } else if (colorSelector < 2.0) {
+                            fireworkColor = vec3(1.0, 0.6, 0.0); // Orange
+                        } else if (colorSelector < 3.0) {
+                            fireworkColor = vec3(0.0, 1.0, 0.2); // Bright green
+                        } else {
+                            fireworkColor = vec3(0.2, 0.4, 1.0); // Blue
+                        }
+                        
+                        // More realistic firework glow with brighter center
+                        float coreIntensity = 1.0 - dist * 2.0; // Smaller, brighter core
+                        float innerGlow = (1.0 - dist * 1.2) * 0.9; // Inner glow
+                        float outerGlow = (1.0 - dist * 0.6) * 0.5; // Outer glow for bigger appearance
+                        
+                        float totalIntensity = max(max(coreIntensity, innerGlow), outerGlow) * v_life;
+                        totalIntensity = max(0.0, totalIntensity);
+                        
+                        // Add white hot center for realism
+                        vec3 hotCenter = mix(fireworkColor, vec3(1.0, 1.0, 0.9), coreIntensity * 0.7);
+                        
+                        gl_FragColor = vec4(hotCenter * 1.5, totalIntensity);
+                    } else if (isTrail) {
                         // Trail particles - bright white/yellow, fade quickly
                         vec3 trailColor = mix(vec3(1.0, 1.0, 0.8), vec3(1.0, 0.8, 0.4), v_life);
                         float trailAlpha = (1.0 - dist * 2.0) * v_life * v_life; // Quadratic fade
@@ -283,53 +315,29 @@ impl App {
         let mut particles = Vec::new();
 
         // Create realistic star field with varied density
-        for i in 0..300 {
+        for _ in 0..300 {
             // Create clusters and sparse areas like real night sky
             let cluster_factor = (js_sys::Math::random() as f32).powf(1.8); // Less sparse, more stars
 
             if cluster_factor > 0.25 { // Lower threshold for more stars
-                let is_shooting = i < 3; // Only 3 shooting stars for realism
-
-                // For shooting stars, position them at different starting points
-                let (x, y) = if is_shooting {
-                    // Start shooting stars from left side at different heights to avoid overlap
-                    let start_x = -50.0; // Start off-screen left
-                    let start_y = 50.0 + (i as f32) * (height as f32 * 0.3); // Space them vertically
-                    (start_x, start_y)
-                } else {
-                    // Random positioning with some clustering for regular stars
-                    let x = (js_sys::Math::random() as f32) * width as f32;
-                    let y = (js_sys::Math::random() as f32) * height as f32;
-                    (x, y)
-                };
+                // Random positioning with some clustering for regular stars
+                let x = (js_sys::Math::random() as f32) * width as f32;
+                let y = (js_sys::Math::random() as f32) * height as f32;
 
                 particles.push(Particle {
                     x,
                     y,
-                    vx: if is_shooting {
-                        120.0 + (js_sys::Math::random() as f32) * 40.0 // Consistent fast rightward speed
-                    } else { 0.0 },
-                    vy: if is_shooting {
-                        -20.0 + (js_sys::Math::random() as f32) * 10.0 // Slight downward angle variation
-                    } else { 0.0 },
-                    life: if is_shooting {
-                        0.7 + (js_sys::Math::random() as f32) * 0.3 // Shooting stars start with varied life
-                    } else {
-                        0.8 + (js_sys::Math::random() as f32) * 0.2 // Background stars have varied brightness
-                    },
+                    vx: 0.0, // Stars don't move
+                    vy: 0.0,
+                    life: 0.8 + (js_sys::Math::random() as f32) * 0.2, // Background stars have varied brightness
                     color_index: (js_sys::Math::random() as f32) * 4.0,
                     is_magic_brush: false,
-                    size_multiplier: if is_shooting {
-                        1.2 + (js_sys::Math::random() as f32) * 1.5 // Very varied shooting star sizes
-                    } else {
-                        0.2 + (js_sys::Math::random() as f32) * 1.0 // Much more varied star sizes
-                    },
-                    fade_speed: if is_shooting {
-                        0.2 + (js_sys::Math::random() as f32) * 0.4 // Varied shooting star fade
-                    } else {
-                        0.05 + (js_sys::Math::random() as f32) * 0.15 // Very slow, varied star twinkle
-                    },
+                    size_multiplier: 0.2 + (js_sys::Math::random() as f32) * 1.0, // Much more varied star sizes
+                    fade_speed: 0.05 + (js_sys::Math::random() as f32) * 0.15, // Very slow, varied star twinkle
                     is_trail_particle: false,
+                    is_firework_rocket: false,
+                    is_firework_particle: false,
+                    firework_target_y: 0.0,
                 });
             }
         }
@@ -413,58 +421,44 @@ impl App {
 
             void main() {
                 vec2 uv = v_texCoord;
-                float time = u_time * 0.00008; // Much slower, more realistic movement
+                float time = u_time * 0.00015; // Faster movement (almost 2x faster)
 
-                // More subtle aurora bands with gentle movement
-                float curtain1 = sin(uv.x * 1.8 + time * 0.8) * cos(uv.x * 1.2 + time * 0.6) * 0.3;
-                float curtain2 = sin(uv.x * 2.2 - time * 0.5) * cos(uv.x * 1.6 - time * 0.4) * 0.25;
+                // Single aurora band with bigger movement
+                float curtain = sin(uv.x * 1.5 + time * 1.2) * cos(uv.x * 1.0 + time * 0.9) * 0.4; // Bigger amplitude
 
-                // Add gentle flowing organic movement
-                float organic1 = sin(uv.x * 3.0 + time * 0.7) * sin(uv.y * 2.0 + time * 0.3) * 0.15;
-                float organic2 = cos(uv.x * 2.5 - time * 0.4) * cos(uv.y * 1.8 - time * 0.2) * 0.12;
+                // Add flowing organic movement
+                float organic = sin(uv.x * 2.8 + time * 1.0) * sin(uv.y * 1.8 + time * 0.5) * 0.2; // Bigger movement
 
                 // Aurora spans across more of the screen with gentle movement
-                float screenLimit = smoothstep(0.9, 0.1, uv.x + sin(time * 0.2) * 0.05); // Subtle moving boundary across more screen
+                float screenLimit = smoothstep(0.9, 0.1, uv.x + sin(time * 0.3) * 0.08); // Slightly faster boundary movement
 
-                // Two aurora bands with more vertical separation
-                float aurora1_height = 0.20 + curtain1 * 0.12 + organic1;
-                float aurora2_height = 0.50 + curtain2 * 0.10 + organic2;
+                // Single aurora band positioned in middle
+                float aurora_height = 0.35 + curtain * 0.15 + organic; // Bigger height variation
 
-                // Dynamic thickness that changes more dramatically
-                float thickness1 = 0.05 + sin(time * 1.2 + uv.x * 3.0) * 0.04;
-                float thickness2 = 0.07 + cos(time * 1.0 - uv.x * 2.5) * 0.05;
+                // Bigger dynamic thickness
+                float thickness = 0.08 + sin(time * 1.5 + uv.x * 2.8) * 0.06; // Bigger thickness variation
 
-                // Calculate fade for each aurora band
-                float fade1 = smoothstep(aurora1_height - thickness1, aurora1_height - thickness1 * 0.3, uv.y) *
-                             smoothstep(aurora1_height + thickness1, aurora1_height + thickness1 * 0.3, uv.y);
-
-                float fade2 = smoothstep(aurora2_height - thickness2, aurora2_height - thickness2 * 0.3, uv.y) *
-                             smoothstep(aurora2_height + thickness2, aurora2_height + thickness2 * 0.3, uv.y);
+                // Calculate fade for aurora band
+                float fade = smoothstep(aurora_height - thickness, aurora_height - thickness * 0.3, uv.y) *
+                            smoothstep(aurora_height + thickness, aurora_height + thickness * 0.3, uv.y);
 
                 // Apply screen limitation
-                fade1 *= screenLimit;
-                fade2 *= screenLimit;
+                fade *= screenLimit;
 
-                // More dynamic green to blue gradient colors
+                // Dynamic green to blue gradient colors
                 vec3 brightGreen = vec3(0.0, 1.0, 0.4);   // Bright green
-                vec3 deepGreen = vec3(0.0, 0.8, 0.2);    // Deep green
                 vec3 blueGreen = vec3(0.0, 0.9, 0.7);    // Blue-green
-                vec3 skyBlue = vec3(0.2, 0.7, 1.0);      // Sky blue
 
                 // Faster color transitions
-                vec3 color1 = mix(brightGreen, blueGreen, sin(time * 1.5 + uv.x * 2.0) * 0.5 + 0.5);
-                vec3 color2 = mix(deepGreen, skyBlue, sin(time * 1.8 - uv.x * 2.5) * 0.5 + 0.5);
+                vec3 finalColor = mix(brightGreen, blueGreen, sin(time * 2.0 + uv.x * 2.5) * 0.5 + 0.5);
 
-                // Combine aurora bands
-                vec3 finalColor = color1 * fade1 + color2 * fade2;
+                // Dynamic vertical streaks
+                float streaks = sin(uv.x * 25.0 + time * 5.0) * sin(uv.y * 12.0 + time * 4.0) * 0.08 + 0.92;
 
-                // More dynamic vertical streaks
-                float streaks = sin(uv.x * 25.0 + time * 4.0) * sin(uv.y * 12.0 + time * 3.0) * 0.08 + 0.92;
+                // Breathing effect
+                float intensity = 0.6 + sin(time * 0.8) * 0.3; // Slightly more intense
 
-                // More pronounced breathing effect
-                float intensity = 0.5 + sin(time * 0.6) * 0.25;
-
-                float totalAlpha = (fade1 + fade2) * intensity * streaks;
+                float totalAlpha = fade * intensity * streaks;
                 gl_FragColor = vec4(finalColor, totalAlpha);
             }
         "#).map_err(|e| JsValue::from_str(&format!("Northern lights fragment shader error: {}", e)))?;
@@ -505,12 +499,7 @@ impl App {
     pub fn render(&mut self, current_time: f64) {
         self.frame_count += 1;
         
-        // Check if we should spawn a new shooting star (every 5-10 seconds)
-        let shooting_star_interval = 5000.0 + (js_sys::Math::random() as f64) * 5000.0; // 5-10 seconds in milliseconds
-        if current_time - self.last_shooting_star_time > shooting_star_interval {
-            self.spawn_new_shooting_star();
-            self.last_shooting_star_time = current_time;
-        }
+        // Removed automatic shooting stars - only fireworks on click now
 
         if self.bloom_enabled {
             // Render to framebuffer first
@@ -606,7 +595,122 @@ impl App {
         let mut new_trail_particles = Vec::new();
 
         for particle in &mut self.particles {
-            if particle.is_trail_particle {
+            if particle.is_firework_rocket {
+                // Firework rocket - moves upward until reaching target height
+                particle.x += particle.vx * dt;
+                particle.y += particle.vy * dt;
+                
+                // Fade very slowly like a shooting star
+                particle.life -= 0.003 * particle.fade_speed;
+                
+                // Create trail particles for shooting star effect
+                if particle.life > 0.1 && (js_sys::Math::random() as f32) < 0.8 {
+                    let trail_particle = Particle {
+                        x: particle.x + (js_sys::Math::random() as f32 - 0.5) * 5.0,
+                        y: particle.y + (js_sys::Math::random() as f32 - 0.5) * 5.0,
+                        vx: particle.vx * 0.2 + (js_sys::Math::random() as f32 - 0.5) * 15.0,
+                        vy: particle.vy * 0.2 + (js_sys::Math::random() as f32 - 0.5) * 15.0,
+                        life: 0.9,
+                        color_index: 1.0, // Bright white for trail
+                        is_magic_brush: false,
+                        size_multiplier: 0.4 + (js_sys::Math::random() as f32) * 0.6,
+                        fade_speed: 1.5 + (js_sys::Math::random() as f32) * 1.5,
+                        is_trail_particle: true,
+                        is_firework_rocket: false,
+                        is_firework_particle: false,
+                        firework_target_y: 0.0,
+                    };
+                    new_trail_particles.push(trail_particle);
+                }
+                
+                // Check if rocket reached its target height
+                if particle.y <= particle.firework_target_y {
+                    // Much bigger explosion with 3x more particles
+                    let base_particles = 180; // 3x bigger (was 60)
+                    let height_bonus = ((self.height - particle.firework_target_y) / self.height * 240.0) as i32; // 3x bigger (was 80)
+                    let num_particles = base_particles + height_bonus;
+                    
+                    for i in 0..num_particles {
+                        let angle = js_sys::Math::random() as f32 * 2.0 * std::f32::consts::PI;
+                        
+                        // Create layers for more realistic firework - some particles go further than others
+                        let layer = (i as f32) / (num_particles as f32);
+                        let speed = if layer < 0.3 {
+                            // Inner layer - slower, fills center
+                            50.0 + (js_sys::Math::random() as f32) * 100.0
+                        } else if layer < 0.7 {
+                            // Middle layer - medium speed
+                            150.0 + (js_sys::Math::random() as f32) * 200.0
+                        } else {
+                            // Outer layer - fastest, creates the big expansion
+                            300.0 + (js_sys::Math::random() as f32) * 300.0 // Much faster for 3x bigger size
+                        };
+                        
+                        // Add slight randomness to positions to avoid perfect circle
+                        let x_offset = (js_sys::Math::random() as f32 - 0.5) * 10.0;
+                        let y_offset = (js_sys::Math::random() as f32 - 0.5) * 10.0;
+                        
+                        let firework_particle = Particle {
+                            x: particle.x + x_offset,
+                            y: particle.y + y_offset,
+                            vx: angle.cos() * speed,
+                            vy: angle.sin() * speed,
+                            life: 1.0,
+                            color_index: 12.0 + (js_sys::Math::random() as f32) * 4.0, // Firework colors
+                            is_magic_brush: false,
+                            is_trail_particle: false,
+                            size_multiplier: if layer < 0.3 {
+                                2.0 + (js_sys::Math::random() as f32) * 1.0 // Bigger center particles
+                            } else {
+                                1.0 + (js_sys::Math::random() as f32) * 1.5 // Outer particles
+                            },
+                            fade_speed: 0.15 + (js_sys::Math::random() as f32) * 0.25, // Even slower fade
+                            is_firework_rocket: false,
+                            is_firework_particle: true,
+                            firework_target_y: 0.0,
+                        };
+                        new_trail_particles.push(firework_particle);
+                    }
+                    
+                    // Remove the rocket
+                    particle.life = 0.0;
+                }
+            } else if particle.is_firework_particle {
+                // Firework explosion particles - affected by gravity
+                if self.gravity_enabled {
+                    particle.vy += self.gravity * dt;
+                }
+                
+                // Less friction for firework particles so they spread out more
+                particle.vx *= 0.98;
+                particle.vy *= 0.98;
+                
+                particle.x += particle.vx * dt;
+                particle.y += particle.vy * dt;
+                
+                // Create trailing sparks for realistic firework rays
+                if particle.life > 0.3 && (js_sys::Math::random() as f32) < 0.3 {
+                    let spark_particle = Particle {
+                        x: particle.x + (js_sys::Math::random() as f32 - 0.5) * 8.0,
+                        y: particle.y + (js_sys::Math::random() as f32 - 0.5) * 8.0,
+                        vx: particle.vx * 0.5 + (js_sys::Math::random() as f32 - 0.5) * 20.0,
+                        vy: particle.vy * 0.5 + (js_sys::Math::random() as f32 - 0.5) * 20.0,
+                        life: 0.7,
+                        color_index: particle.color_index, // Same color as parent
+                        is_magic_brush: false,
+                        size_multiplier: 0.3 + (js_sys::Math::random() as f32) * 0.4,
+                        fade_speed: 1.0 + (js_sys::Math::random() as f32) * 2.0,
+                        is_trail_particle: true,
+                        is_firework_rocket: false,
+                        is_firework_particle: false,
+                        firework_target_y: 0.0,
+                    };
+                    new_trail_particles.push(spark_particle);
+                }
+                
+                // Fade out over time
+                particle.life -= 0.008 * particle.fade_speed;
+            } else if particle.is_trail_particle {
                 // Trail particles fade quickly and don't move much
                 particle.life -= 0.02;
                 particle.vx *= 0.95;
@@ -627,36 +731,6 @@ impl App {
 
                 // Light painting fade (20 seconds): 1.0 / (20 * 60) = 0.00083
                 particle.life -= 0.00083 * particle.fade_speed;
-            } else if particle.vx.abs() > 50.0 || particle.vy.abs() > 50.0 {
-                // Shooting star movement (updated condition to catch all directions)
-                particle.x += particle.vx * dt;
-                particle.y += particle.vy * dt;
-                
-                // Fade shooting stars over 2 seconds max (1.0 life / 2 seconds / 60 fps = 0.0083 per frame)
-                particle.life -= 0.0083 * particle.fade_speed;
-                
-                // Create trail particles for shooting star effect
-                if particle.life > 0.1 && (js_sys::Math::random() as f32) < 0.6 {
-                    let trail_particle = Particle {
-                        x: particle.x + (js_sys::Math::random() as f32 - 0.5) * 3.0,
-                        y: particle.y + (js_sys::Math::random() as f32 - 0.5) * 3.0,
-                        vx: particle.vx * 0.3 + (js_sys::Math::random() as f32 - 0.5) * 10.0,
-                        vy: particle.vy * 0.3 + (js_sys::Math::random() as f32 - 0.5) * 10.0,
-                        life: 0.8,
-                        color_index: 1.0, // Bright white for trail
-                        is_magic_brush: false,
-                        size_multiplier: 0.3 + (js_sys::Math::random() as f32) * 0.4,
-                        fade_speed: 2.0 + (js_sys::Math::random() as f32) * 2.0,
-                        is_trail_particle: true,
-                    };
-                    new_trail_particles.push(trail_particle);
-                }
-                
-                // Remove shooting stars when they go off screen (any direction)
-                if particle.x > self.width + 100.0 || particle.x < -100.0 || 
-                   particle.y > self.height + 100.0 || particle.y < -100.0 {
-                    particle.life = 0.0; // Mark for removal
-                }
             } else {
                 // Regular stars - completely static, just twinkling
                 // No movement at all - real stars don't move noticeably
@@ -801,6 +875,9 @@ impl App {
                 is_trail_particle: false,
                 size_multiplier: 0.5 + (js_sys::Math::random() as f32) * 1.5,
                 fade_speed: 0.8 + (js_sys::Math::random() as f32) * 1.0, // Random fade speed (0.8-1.8x)
+                is_firework_rocket: false,
+                is_firework_particle: false,
+                firework_target_y: 0.0,
             };
 
             // Always add new particles - let them fade naturally based on age
@@ -875,9 +952,40 @@ impl App {
             size_multiplier: 1.2 + (js_sys::Math::random() as f32) * 1.5,
             fade_speed: 0.5 + (js_sys::Math::random() as f32) * 0.5, // 0.5-1.0 fade speed for 2 second max lifetime
             is_trail_particle: false,
+            is_firework_rocket: false,
+            is_firework_particle: false,
+            firework_target_y: 0.0,
         };
         
         self.particles.push(new_shooting_star);
+    }
+
+    #[wasm_bindgen]
+    pub fn spawn_firework(&mut self, x: f32, y: f32, current_time: f64) {
+        // Calculate target height based on click position
+        // Click closer to bottom = higher firework (bigger explosion)
+        let click_ratio = y / self.height; // 0.0 at top, 1.0 at bottom
+        let target_height_ratio = 0.2 + (1.0 - click_ratio) * 0.6; // 0.2 to 0.8
+        let target_y = self.height * target_height_ratio;
+        
+        // Create firework rocket that travels vertically upward like a shooting star
+        let rocket = Particle {
+            x,
+            y,
+            vx: 0.0, // No horizontal movement
+            vy: -300.0 - (1.0 - click_ratio) * 200.0, // Faster for higher targets
+            life: 1.0,
+            color_index: (js_sys::Math::random() as f32) * 4.0, // Use shooting star colors
+            is_magic_brush: false,
+            is_trail_particle: false,
+            size_multiplier: 2.0 + (js_sys::Math::random() as f32) * 1.0, // Bigger than regular shooting stars
+            fade_speed: 0.3, // Much slower fade than regular shooting stars
+            is_firework_rocket: true,
+            is_firework_particle: false,
+            firework_target_y: target_y,
+        };
+        
+        self.particles.push(rocket);
     }
 
     #[wasm_bindgen]
@@ -902,6 +1010,9 @@ impl App {
                 is_trail_particle: false,
                 size_multiplier: 0.8 + (js_sys::Math::random() as f32) * 0.4,
                 fade_speed: 0.5 + (js_sys::Math::random() as f32) * 1.0, // Random fade speed for natural variation (0.5-1.5x)
+                is_firework_rocket: false,
+                is_firework_particle: false,
+                firework_target_y: 0.0,
             };
 
             // Always add new particles - let them fade naturally based on age
